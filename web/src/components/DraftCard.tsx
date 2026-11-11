@@ -101,13 +101,13 @@ export function DraftCard({
         <div className="grow">
           <div className="draft-sum" data-testid="draft-summary">
             <span className={`amt${unc('amount') ? ' unc' : ''}`}>{f.amountCents ? `${money(f.amountCents)} ${f.currency}` : 'Montant ?'}</span>
-            <span className="sep">·</span>
+            <span className="sep"> · </span>
             <span className={unc('merchant') ? 'unc' : ''}>{f.merchant || 'Commerçant ?'}</span>
-            <span className="sep">·</span>
+            <span className="sep"> · </span>
             <span className={unc('category') ? 'unc' : ''}>{f.splits?.length ? `${f.splits.length} catégories` : draft.categoryLabel || 'Catégorie ?'}</span>
-            <span className="sep">·</span>
+            <span className="sep"> · </span>
             <span className={unc('date') ? 'unc' : ''}>{f.date ? dayLabel(f.date) : 'Date ?'}</span>
-            <span className="sep">·</span>
+            <span className="sep"> · </span>
             <span>{draft.budgetName}</span>
             {f.type === 'refund' && <span className="chip ok">Remboursement</span>}
           </div>

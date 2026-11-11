@@ -6,9 +6,10 @@ let n = 0;
 export async function signup(page: Page) {
   await page.goto('/');
   const email = `test${Date.now()}${n++}@exemple.ca`;
-  if (await page.getByRole('button', { name: 'Créer un compte' }).isVisible().catch(() => false)) {
-    await page.getByRole('button', { name: 'Créer un compte' }).click();
-  }
+  const submit = page.getByRole('button', { name: 'Créer le compte' });
+  const toggle = page.getByRole('button', { name: 'Créer un compte' });
+  await expect(submit.or(toggle)).toBeVisible();
+  if (await toggle.isVisible()) await toggle.click();
   await page.getByLabel('Prénom').fill('Test');
   await page.getByLabel('Courriel').fill(email);
   await page.getByLabel(/Mot de passe/).fill('motdepasse-solide');

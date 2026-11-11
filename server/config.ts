@@ -7,26 +7,29 @@ function bool(v: string | undefined, def: boolean): boolean {
   return ['1', 'true', 'yes', 'oui'].includes(v.toLowerCase());
 }
 
+// Sur Railway : volume persistant et domaine public détectés automatiquement.
+const railwayUrl = env.RAILWAY_PUBLIC_DOMAIN ? `https://${env.RAILWAY_PUBLIC_DOMAIN}` : '';
+const isProd = env.NODE_ENV === 'production' || Boolean(env.RAILWAY_ENVIRONMENT_NAME || env.RAILWAY_ENVIRONMENT);
+
 export const config = {
+  isProd,
   port: Number(env.PORT || 3000),
   host: env.HOST || '0.0.0.0',
-  dataDir: path.resolve(env.DATA_DIR || './data'),
+  dataDir: path.resolve(env.DATA_DIR || env.RAILWAY_VOLUME_MOUNT_PATH || './data'),
   /** URL publique de l'application (sert aux liens des notifications). */
-  appUrl: (env.APP_URL || 'http://localhost:3000').replace(/\/$/, ''),
+  appUrl: (env.APP_URL || railwayUrl || 'http://localhost:3000').replace(/\/$/, ''),
   /** Secret pour signer les jetons « Reporter » des notifications. Obligatoire en production. */
   appSecret: env.APP_SECRET || 'dev-secret-a-remplacer',
-  cookieSecure: bool(env.COOKIE_SECURE, env.NODE_ENV === 'production'),
+  cookieSecure: bool(env.COOKIE_SECURE, isProd),
   allowSignup: bool(env.ALLOW_SIGNUP, false),
   defaultTimezone: env.DEFAULT_TIMEZONE || 'America/Toronto',
   defaultCurrency: 'CAD',
 
   vision: {
-    /** anthropic (par défaut) | openai | local | mock-error */
+    /** anthropic (par défaut) | local | mock-error */
     provider: (env.VISION_PROVIDER || 'anthropic').toLowerCase(),
     anthropicKey: env.ANTHROPIC_API_KEY || '',
     anthropicModel: env.ANTHROPIC_VISION_MODEL || 'claude-opus-5-5',
-    openaiKey: env.OPENAI_API_KEY || '',
-    openaiModel: env.OPENAI_VISION_MODEL || 'gpt-4o-mini',
     /** Masquer automatiquement les numéros de carte (OCR local) avant l'envoi au fournisseur. */
     redactCardNumbers: bool(env.REDACT_CARD_NUMBERS, true),
     maxUploadBytes: Number(env.MAX_UPLOAD_MB || 12) * 1024 * 1024,

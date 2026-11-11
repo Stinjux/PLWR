@@ -133,6 +133,7 @@ export const localProvider: VisionProvider = {
         let merchant = l.text
           .slice(0, a.index)
           .replace(/\b\d{4}-\d{2}-\d{2}\b/, '')
+          .replace(/^\s*(aujourd['’]hui|avant[- ]hier|hier)\b/i, '')
           .replace(/^\s*\d{1,2}\s*[a-zéû]{3,5}\.?(\s+\d{4})?(?![a-z])/i, '')
           .replace(/\b\d{1,2}\/\d{1,2}(\/\d{2,4})?\b/, '')
           .replace(/[|•·]+/g, ' ')

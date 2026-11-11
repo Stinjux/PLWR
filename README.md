@@ -83,9 +83,36 @@ npm run e2e
 
 Les tests E2E démarrent un serveur isolé (`tests/.data`, fournisseur d’images `local`) et pilotent l’interface sur un téléphone Android émulé.
 
-### Mise en ligne
+### Mise en ligne sur Railway
 
-Il faut **HTTPS** (notifications, installation sur iPhone, cookies `Secure`). N’importe quel hébergeur Node avec disque persistant convient (VPS, Fly.io, Render, Railway…) : monter un volume sur `DATA_DIR`, définir `NODE_ENV=production`, `APP_URL`, `APP_SECRET`, `COOKIE_SECURE=true`. Sauvegarde : copier `DATA_DIR/plwr.sqlite`.
+Le dépôt contient `railway.json` (build `npm run build`, démarrage `npm start`, vérification de santé sur `/api/auth/status`, une seule instance).
+
+1. **New Project → Deploy from GitHub repo** → choisir ce dépôt.
+2. **Volume (obligatoire)** : clic droit sur le service → *Attach Volume* → point de montage `/data`. Railway fournit alors `RAILWAY_VOLUME_MOUNT_PATH`, que l’app utilise automatiquement pour la base SQLite et les images temporaires. Sans volume, **toutes les données sont perdues à chaque déploiement** (un avertissement s’affiche dans les journaux).
+3. **Domaine** : *Settings → Networking → Generate Domain*. L’URL HTTPS est détectée via `RAILWAY_PUBLIC_DOMAIN` (ou fixe `APP_URL` si tu utilises un domaine personnalisé).
+4. **Variables** : onglet *Variables → Raw Editor*, coller puis remplir :
+
+```
+APP_SECRET=
+ANTHROPIC_API_KEY=
+VISION_PROVIDER=anthropic
+VAPID_PUBLIC_KEY=
+VAPID_PRIVATE_KEY=
+VAPID_SUBJECT=mailto:ton-courriel@exemple.ca
+ALLOW_SIGNUP=false
+DEFAULT_TIMEZONE=America/Toronto
+```
+
+   - `APP_SECRET` : `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`
+   - `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` : `npm run vapid` en local, une seule fois. **Ne les change plus ensuite** : les téléphones déjà abonnés devraient se réabonner.
+   - Inutile de définir `PORT`, `DATA_DIR`, `APP_URL`, `COOKIE_SECURE` ou `NODE_ENV` : Railway fournit `PORT`, et l’app détecte Railway (cookies `Secure`, volume, domaine).
+5. Déployer, ouvrir l’URL, **créer ton compte tout de suite** (le premier compte ferme les inscriptions), puis Réglages → Activer les notifications → Envoyer une notification de test.
+
+Garde **une seule instance** (`numReplicas: 1`) : SQLite et le planificateur de rappels sont prévus pour un seul processus, qui doit tourner en continu (désactive toute mise en veille de type *App Sleeping*, sinon les rappels ne partent pas). Sauvegarde : télécharger `/data/plwr.sqlite` (ou activer les sauvegardes du volume Railway).
+
+### Autre hébergeur
+
+Il faut **HTTPS** (notifications, installation sur iPhone, cookies `Secure`) et un disque persistant : monter un volume sur `DATA_DIR`, définir `NODE_ENV=production`, `APP_URL`, `APP_SECRET`, `COOKIE_SECURE=true`.
 
 ## Fonctionnalités
 

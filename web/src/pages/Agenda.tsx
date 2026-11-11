@@ -125,7 +125,7 @@ export function Agenda() {
       } catch (err) {
         toast((err as Error).message);
       }
-      await qc.invalidateQueries({ queryKey: ['events'] });
+      await qc.invalidateQueries();
       setPreview(null);
     };
     el.addEventListener('pointermove', move);
@@ -231,7 +231,7 @@ export function Agenda() {
                     return (
                       <div
                         key={o.id}
-                        className={`block ${o.kind}${o.status === 'done' ? ' done' : ''}${dragging ? ' dragging' : ''}`}
+                        className={`ev-block ${o.kind}${o.status === 'done' ? ' done' : ''}${dragging ? ' dragging' : ''}`}
                         style={{ top, height: h, left: `calc(${(l.lane / l.lanes) * 100}% + 3px)`, width: `calc(${100 / l.lanes}% - 6px)`, right: 'auto' }}
                         onClick={(ev) => (ev.stopPropagation(), openEditor({ mode: 'edit', id: o.id }))}
                         data-testid="block"

@@ -173,7 +173,9 @@ test('5 et 6. Import d’une capture : correction, seules les lignes confirmées
   await expect(card).toContainText('Confirmée');
   // Et deux requêtes simultanées sur une même fiche (réseau lent, deux appareils)
   await say(page, '9,99 $ chez Pizza Pizza');
-  const draftId = await page.getByTestId('draft-card').last().getAttribute('data-draft-id');
+  const pizza = page.getByTestId('draft-card').filter({ hasText: 'Pizza Pizza' });
+  await expect(pizza).toBeVisible();
+  const draftId = await pizza.getAttribute('data-draft-id');
   const ids = await page.evaluate(async (id) => {
     const call = () => fetch(`/api/drafts/${id}/confirm`, { method: 'POST', headers: { 'x-plwr': '1', 'content-type': 'application/json' }, body: '{}' }).then((r) => r.json());
     const [a, b] = await Promise.all([call(), call()]);
@@ -215,4 +217,55 @@ test('7. Erreur de lecture simulée : la saisie manuelle permet de terminer', as
   await expect(page.getByText(/Je n’ai pas pu lire cette image/)).toBeVisible();
   await page.getByRole('button', { name: 'Saisir manuellement' }).click();
   await expect(page.getByTestId('manual-form')).toBeVisible();
+});
+
+test('Exemple : une rencontre se prolonge de 45 min, le bloc CFA et la gym sont replacés, les fixes restent', async ({ page }) => {
+  await signup(page);
+  const d = DateTime.now().setZone(TZ).plus({ days: 1 }).toISODate();
+  const at = (hhmm: string) => DateTime.fromISO(`${d}T${hhmm}`, { zone: TZ }).toUTC().toISO();
+  await page.evaluate(async (items) => {
+    for (const it of items) await fetch('/api/events', { method: 'POST', headers: { 'x-plwr': '1', 'content-type': 'application/json' }, body: JSON.stringify(it) });
+  }, [
+    { title: 'Rencontre test', kind: 'fixed', start: at('13:00'), durationMin: 60 },
+    { title: 'Bloc CFA test', kind: 'flexible', start: at('14:15'), durationMin: 60, priority: 1, preferredWindow: 'apres-midi', reminders: [5] },
+    { title: 'Appel test', kind: 'fixed', start: at('15:30'), durationMin: 30 },
+    { title: 'Gym test', kind: 'flexible', start: at('16:00'), durationMin: 60, preferredWindow: '16:00-21:00' },
+  ]);
+  await nav(page, 'Agenda');
+  await page.getByRole('button', { name: 'Suivant' }).click();
+  await page.locator('[data-testid=block][data-title="Rencontre test"]').click();
+  await page.getByRole('button', { name: '+45' }).click();
+  const changes = page.getByTestId('plan-changes');
+  await expect(changes).toContainText('Bloc CFA test');
+  await expect(changes).toContainText('Gym test');
+  await expect(changes).not.toContainText('Rencontre test');
+  await expect(changes).not.toContainText('Appel test');
+  await page.getByTestId('apply-plan').click();
+  await expect(page.getByText('Nouvel horaire appliqué · rappels mis à jour')).toBeVisible();
+  const startOf = (t: string) => page.locator(`[data-testid=block][data-title="${t}"]`).getAttribute('data-start');
+  await expect(page.locator('[data-testid=block][data-title="Bloc CFA test"]')).not.toHaveAttribute('data-start', at('14:15')!);
+  expect(await startOf('Rencontre test')).toBe(at('13:00'));
+  expect(await startOf('Appel test')).toBe(at('15:30'));
+  // Aucun chevauchement avec la rencontre prolongée (13 h–14 h 45) ni l'appel (15 h 30–16 h)
+  for (const t of ['Bloc CFA test', 'Gym test']) {
+    const s = (await startOf(t))!;
+    const e = DateTime.fromISO(s).plus({ minutes: 60 }).toUTC().toISO()!;
+    for (const [fs, fe] of [[at('13:00')!, at('14:45')!], [at('15:30')!, at('16:00')!]]) expect(e <= fs || s >= fe, `${t} chevauche un rendez-vous fixe`).toBeTruthy();
+  }
+});
+
+test('Rappel envoyé par le serveur à l’heure prévue, puis « Reporter »', async ({ page }) => {
+  test.setTimeout(150_000);
+  await signup(page);
+  await page.evaluate(() => fetch('/api/me/settings', { method: 'PATCH', headers: { 'x-plwr': '1', 'content-type': 'application/json' }, body: JSON.stringify({ quietHours: { enabled: false } }) }));
+  // Rendez-vous dans 2 minutes, rappel 1 minute avant
+  const start = DateTime.now().plus({ minutes: 2 }).startOf('minute').toUTC().toISO();
+  await page.evaluate((s) => fetch('/api/events', { method: 'POST', headers: { 'x-plwr': '1', 'content-type': 'application/json' }, body: JSON.stringify({ title: 'Appel imminent', kind: 'fixed', start: s, durationMin: 15, reminders: [1] }) }), start);
+  await expect
+    .poll(async () => (await page.evaluate(() => fetch('/api/notifications').then((r) => r.json()))).map((n: any) => n.title), { timeout: 120_000, intervals: [3000] })
+    .toContain('📅 Appel imminent');
+  await page.goto('/reglages');
+  await page.getByRole('link', { name: 'Reporter' }).first().click();
+  await page.getByRole('button', { name: '10 min' }).click();
+  await expect(page.getByText(/Rappel reporté à/)).toBeVisible();
 });

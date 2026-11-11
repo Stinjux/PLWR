@@ -91,6 +91,9 @@ export function EventEditor({ target, onClose }: { target: EditorTarget; onClose
     queryKey: ['event', target.mode === 'edit' ? target.id : 'new'],
     queryFn: () => api.get<Occ>(`/api/events/${encodeURIComponent((target as any).id)}`),
     enabled: target.mode === 'edit',
+    // Toujours relire l'élément : l'horaire et ses rappels ont pu changer (glisser-déposer, réorganisation)
+    staleTime: 0,
+    gcTime: 0,
   });
   const [form, setForm] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);

@@ -94,7 +94,7 @@ function findSlot(ctx: DayCtx, durMs: number, opts: { pref?: Interval | null; af
     const iv = { s: t, e: t + durMs };
     if (!isFree(ctx, iv)) continue;
     let cost = 0;
-    if (opts.pref) cost += iv.s >= opts.pref.s && iv.e <= opts.pref.e ? 0 : 1e9 + Math.min(Math.abs(iv.s - opts.pref.s), Math.abs(iv.e - opts.pref.e));
+    if (opts.pref) cost += iv.s >= opts.pref.s && iv.e <= opts.pref.e ? 0 : 1e9 + Math.min(Math.abs(iv.s - opts.pref.s), Math.abs(iv.e - opts.pref.e)) / MIN;
     if (opts.due && iv.e > opts.due) cost += 1e12;
     if (opts.after !== undefined) cost += iv.s >= opts.after ? (iv.s - opts.after) / MIN : 1e6 + (opts.after - iv.s) / MIN;
     else cost += (iv.s - ctx.win.s) / MIN;
