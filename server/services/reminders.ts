@@ -4,6 +4,7 @@ import { all, get, run, uid, nowIso } from '../db.ts';
 import { config, pushEnabled, pushState } from '../config.ts';
 import { rowToUser, signToken, type User } from '../auth.ts';
 import { listOccurrences } from './events.ts';
+import { participantOccurrences } from './sharing.ts';
 import { formatMoney, formatTime, formatDayTime } from '../time.ts';
 import { purgeOldImages } from './imports.ts';
 
@@ -66,7 +67,9 @@ export function computeReminders(user: User, fromIso: string, toIso: string): Re
     if (fireAt >= fromIso && fireAt <= toIso) out.push({ ...r, fireAt, deferredByQuietHours: q.deferred });
   };
   // Événements et blocs planifiés (on regarde jusqu'à 8 jours en avant pour couvrir les rappels « la veille »)
-  const occs = listOccurrences(user.id, user.timezone, from.minus({ days: 1 }).toUTC().toISO()!, to.plus({ days: 8 }).toUTC().toISO()!);
+  const wFrom = from.minus({ days: 1 }).toUTC().toISO()!, wTo = to.plus({ days: 8 }).toUTC().toISO()!;
+  // Mes événements + ceux d'autres agendas où je suis participant (mêmes délais de rappel que l'événement)
+  const occs = [...listOccurrences(user.id, user.timezone, wFrom, wTo), ...participantOccurrences(user.id, wFrom, wTo)];
   for (const o of occs) {
     if (o.status !== 'active' || !o.start) continue;
     for (const off of o.reminders) {

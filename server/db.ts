@@ -255,6 +255,38 @@ CREATE TABLE IF NOT EXISTS notifications (
   UNIQUE (user_id, dedupe_key)
 );
 
+-- Agenda partagé : accès d'une personne (member) à l'agenda d'une autre (owner)
+CREATE TABLE IF NOT EXISTS calendar_members (
+  owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  member_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  role TEXT NOT NULL CHECK (role IN ('edit','view','busy')),
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (owner_id, member_id)
+);
+CREATE INDEX IF NOT EXISTS idx_members_member ON calendar_members(member_id);
+
+-- Invitations : par courriel (usage unique, 14 jours) ou lien réutilisable (email NULL) jusqu'à révocation
+CREATE TABLE IF NOT EXISTS calendar_invites (
+  id TEXT PRIMARY KEY,
+  owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  email TEXT,
+  role TEXT NOT NULL CHECK (role IN ('edit','view','busy')),
+  created_at TEXT NOT NULL,
+  expires_at TEXT,
+  used_at TEXT,
+  used_by TEXT,
+  revoked_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_invites_owner ON calendar_invites(owner_id);
+
+-- Participants d'un événement (sur l'événement maître d'une série)
+CREATE TABLE IF NOT EXISTS event_participants (
+  event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  PRIMARY KEY (event_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_participants_user ON event_participants(user_id);
+
 CREATE TABLE IF NOT EXISTS snoozes (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -296,6 +328,14 @@ export function tx<T>(fn: () => T): T {
     throw e;
   }
 }
+
+// ---------- Migrations légères (colonnes ajoutées après la première version) ----------
+function addColumn(table: string, column: string, ddl: string) {
+  const cols = all<{ name: string }>(`PRAGMA table_info(${table})`).map((c) => c.name);
+  if (!cols.includes(column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${ddl}`);
+}
+/** details : les personnes qui voient l'agenda voient tout ; busy : elles voient seulement « Occupé ». */
+addColumn('events', 'visibility', "TEXT NOT NULL DEFAULT 'details' CHECK (visibility IN ('details','busy'))");
 
 export function parseJson<T>(s: string | null | undefined, fallback: T): T {
   if (!s) return fallback;

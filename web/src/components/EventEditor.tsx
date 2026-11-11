@@ -6,6 +6,8 @@ import { TZ, dt, duration, fromLocalInput, goalValue, time, toLocalInput, todayI
 import { Icon, Seg, Sheet, useToast, Check } from './ui';
 import { ReorganizeDialog } from './ReorganizeDialog';
 import { RecurrenceEditor, recFromRule, ruleFromRec, type Rec, type Rule } from './RecurrenceEditor';
+import { Avatar, usePeople, type Person } from '../lib/people';
+import { useApp } from '../App';
 
 export type Occ = {
   id: string;
@@ -30,6 +32,11 @@ export type Occ = {
   dueReminders: number[];
   goalIds: string[];
   isRecurring: boolean;
+  ownerId: string;
+  visibility: 'details' | 'busy';
+  participantIds: string[];
+  canEdit?: boolean;
+  redacted?: boolean;
   nextReminders?: { fireAt: string; title: string; deferredByQuietHours: boolean; kind: string }[];
 };
 
@@ -86,8 +93,65 @@ export function ScopeHost() {
   );
 }
 
+/** Fiche en lecture seule : élément d'un agenda que je peux seulement consulter. */
+function ReadOnlyEvent({ occ, people, onClose }: { occ: Occ; people: Person[]; onClose: () => void }) {
+  const owner = people.find((p) => p.id === occ.ownerId);
+  const faces = [occ.ownerId, ...occ.participantIds].map((id) => people.find((p) => p.id === id)).filter(Boolean) as Person[];
+  return (
+    <Sheet title={occ.redacted ? 'Occupé' : occ.title} onClose={onClose}>
+      <div className="stack">
+        <div className="event-when">
+          {occ.start ? (
+            <>
+              <div>{dayLabel(dt(occ.start).toISODate()!)}</div>
+              <div className="muted">
+                {time(occ.start)} – {time(occ.end)}
+              </div>
+            </>
+          ) : (
+            <div className="muted">À placer · {duration(occ.durationMin)}</div>
+          )}
+        </div>
+        <ul className="group">
+          {owner && (
+            <li>
+              <Avatar person={owner} size={32} />
+              <span className="grow">Agenda de {owner.name}</span>
+            </li>
+          )}
+          {occ.location && (
+            <li>
+              <Icon.pin style={{ width: 20, height: 20, color: 'var(--muted)' }} />
+              <span className="grow">{occ.location}</span>
+            </li>
+          )}
+          {faces.length > 1 &&
+            faces.slice(1).map((p) => (
+              <li key={p.id}>
+                <Avatar person={p} size={32} />
+                <span className="grow">{p.me ? 'Moi' : p.name}</span>
+                <span className="small muted">Participant</span>
+              </li>
+            ))}
+        </ul>
+        {occ.notes && <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{occ.notes}</p>}
+        <div className="banner small">
+          <Icon.lock style={{ width: 18, height: 18, flex: 'none' }} />
+          <span>
+            {occ.redacted
+              ? `${owner?.name || 'Cette personne'} partage seulement ses plages occupées.`
+              : `Tu peux consulter cet élément. Seules les personnes qui peuvent modifier l’agenda de ${owner?.name || 'son propriétaire'} peuvent le changer.`}
+          </span>
+        </div>
+      </div>
+    </Sheet>
+  );
+}
+
 export function EventEditor({ target, onClose }: { target: EditorTarget; onClose: () => void }) {
   const toast = useToast();
+  const { me } = useApp();
+  const people = usePeople().data || [];
   const goals = useGoalsList().data || [];
   const existing = useQuery({
     queryKey: ['event', target.mode === 'edit' ? target.id : 'new'],
@@ -126,6 +190,9 @@ export function EventEditor({ target, onClose }: { target: EditorTarget; onClose
         reminders: target.kind === 'fixed' || target.start ? [10] : [],
         dueReminders: [],
         goalIds: [],
+        ownerId: me.user.id,
+        participantIds: [],
+        visibility: 'details',
       });
     } else if (existing.data) {
       const o = existing.data;
@@ -145,6 +212,9 @@ export function EventEditor({ target, onClose }: { target: EditorTarget; onClose
         reminders: o.reminders,
         dueReminders: o.dueReminders,
         goalIds: o.goalIds,
+        ownerId: o.ownerId,
+        participantIds: o.participantIds,
+        visibility: o.visibility,
       });
       if (target.action === 'complete') setComplete(o);
     }
@@ -166,8 +236,12 @@ export function EventEditor({ target, onClose }: { target: EditorTarget; onClose
       dueAt: form.dueLocal ? fromLocalInput(form.dueLocal) : null,
       reminders: form.reminders,
       dueReminders: form.dueLocal ? form.dueReminders : [],
-      goalIds: form.goalIds,
+      participantIds: form.participantIds,
+      visibility: form.visibility,
     };
+    // Les objectifs sont personnels : on ne les lie qu'aux éléments de mon agenda
+    if (form.ownerId === me.user.id) p.goalIds = form.goalIds;
+    if (target.mode === 'new') p.ownerId = form.ownerId;
     if (form.scheduled) {
       p.start = fromLocalInput(form.startLocal);
       p.rrule = ruleFromRec(form.rec as Rec, form.startLocal);
@@ -230,8 +304,15 @@ export function EventEditor({ target, onClose }: { target: EditorTarget; onClose
 
   if (complete) return <CompleteDialog occ={complete} onClose={onClose} />;
   if (reorg) return <ReorganizeDialog date={reorg} onClose={onClose} />;
+  if (occ && (occ.canEdit === false || occ.redacted)) return <ReadOnlyEvent occ={occ} people={people} onClose={onClose} />;
 
   const isNew = target.mode === 'new';
+  const mineOwner = form.ownerId === me.user.id;
+  // Agendas où je peux ajouter : le mien et ceux où j'ai « Peut modifier »
+  const calendars = people.filter((p) => p.access === 'owner' || p.access === 'edit');
+  const ownerPerson = people.find((p) => p.id === form.ownerId);
+  const candidates = people.filter((p) => p.id !== form.ownerId);
+  const shared = people.length > 1;
   return (
     <Sheet
       title={isNew ? (form.kind === 'fixed' ? 'Nouvel événement' : 'Nouvelle tâche') : form.kind === 'fixed' ? 'Rendez-vous' : 'Tâche'}
@@ -250,7 +331,7 @@ export function EventEditor({ target, onClose }: { target: EditorTarget; onClose
       }
     >
       <div className="stack">
-        {!isNew && occ && occ.status !== 'cancelled' && (
+        {!isNew && occ && occ.status !== 'cancelled' && occ.ownerId === me.user.id && (
           <div className="row wrap">
             {occ.status === 'done' ? (
               <span className="chip ok">✓ Terminé</span>
@@ -286,6 +367,23 @@ export function EventEditor({ target, onClose }: { target: EditorTarget; onClose
           ]}
           onChange={(v) => set({ kind: v, scheduled: v === 'fixed' ? true : form.scheduled })}
         />
+        {isNew && calendars.length > 1 && (
+          <label className="field">
+            Agenda
+            <select className="input" aria-label="Agenda" value={form.ownerId} onChange={(e) => set({ ownerId: e.target.value, participantIds: form.participantIds.filter((x: string) => x !== e.target.value) })}>
+              {calendars.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.me ? 'Mon agenda' : `Agenda de ${p.name}`}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {!isNew && !mineOwner && ownerPerson && (
+          <div className="row small muted">
+            <Avatar person={ownerPerson} size={22} /> Dans l’agenda de {ownerPerson.name}
+          </div>
+        )}
         <label className="field">
           Titre
           <input className="input" value={form.title} onChange={(e) => set({ title: e.target.value })} autoFocus={isNew} aria-label="Titre" placeholder={form.kind === 'fixed' ? 'Rencontre, rendez-vous…' : 'Bloc CFA, gym, appel…'} />
@@ -396,7 +494,47 @@ export function EventEditor({ target, onClose }: { target: EditorTarget; onClose
             </span>
           </div>
         )}
-        {goals.length > 0 && (
+        {shared && (
+          <div>
+            <div className="small muted" style={{ fontWeight: 600, marginBottom: 6 }}>
+              <Icon.users style={{ width: 14, height: 14, verticalAlign: -2 }} /> Participants
+            </div>
+            <div className="row wrap" role="group" aria-label="Participants">
+              {candidates.map((p) => {
+                const on = form.participantIds.includes(p.id);
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    className={`person-chip${on ? '' : ' off'}`}
+                    aria-pressed={on}
+                    onClick={() => set({ participantIds: on ? form.participantIds.filter((x: string) => x !== p.id) : [...form.participantIds, p.id] })}
+                  >
+                    <Avatar person={p} size={24} />
+                    {p.me ? 'Moi' : p.name}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="tiny muted" style={{ marginTop: 6 }}>Les participants voient cet élément dans leur agenda et en reçoivent les rappels.</div>
+          </div>
+        )}
+        {shared && (
+          <div>
+            <div className="small muted" style={{ fontWeight: 600, marginBottom: 6 }}>Ce que les autres voient</div>
+            <Seg
+              full
+              label="Visibilité"
+              value={form.visibility}
+              options={[
+                ['details', 'Tous les détails'],
+                ['busy', 'Occupé seulement'],
+              ]}
+              onChange={(v) => set({ visibility: v })}
+            />
+          </div>
+        )}
+        {mineOwner && goals.length > 0 && (
           <div>
             <div className="small muted" style={{ fontWeight: 600, marginBottom: 6 }}>Objectifs liés</div>
             <ul className="list">

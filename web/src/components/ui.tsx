@@ -33,6 +33,10 @@ export const Icon = {
   repeat: P('M4 12a8 8 0 0 1 14-5l2 2|M20 4v5h-5|M20 12a8 8 0 0 1-14 5l-2-2|M4 20v-5h5'),
   pin: P('M12 21s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12z|M12 11a2 2 0 1 0 0-4 2 2 0 0 0 0 4z'),
   logout: P('M15 4h4v16h-4|M10 8l-4 4 4 4|M6 12h10'),
+  users: P('M9 11a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4z|M3.5 19c.6-3 2.8-4.6 5.5-4.6s4.9 1.6 5.5 4.6|M16 5.2a3 3 0 0 1 0 5.6|M17.5 14.6c1.6.6 2.7 2 3 4.4'),
+  link: P('M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1|M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1'),
+  copy: P('M9 9h11v11H9z|M5 15V4h11'),
+  lock: P('M6 11h12v9H6z|M8.5 11V8a3.5 3.5 0 0 1 7 0v3'),
 };
 
 export function Sheet({ title, onClose, children, footer, tall, labelledBy }: { title: ReactNode; onClose: () => void; children: ReactNode; footer?: ReactNode; tall?: boolean; labelledBy?: string }) {

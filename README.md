@@ -9,7 +9,7 @@ Application personnelle (PWA) qui réunit l’agenda, les objectifs et le budget
 | Interface | React 19 + Vite, PWA (manifeste + service worker) | Installable sur l’écran d’accueil ; requis par iOS pour les notifications |
 | Serveur | Node.js ≥ 22.18 (TypeScript exécuté nativement), Hono | Un seul processus, pas d’étape de compilation côté serveur |
 | Données | SQLite intégré (`node:sqlite`), fichier dans `DATA_DIR` | Aucune base externe à gérer ; sauvegarde = copier un fichier |
-| Authentification | Courriel + mot de passe (scrypt), session en cookie `HttpOnly`/`SameSite=Lax`, en-tête anti-CSRF, limitation des tentatives | Application personnelle : un compte, inscriptions fermées ensuite |
+| Authentification | Courriel + mot de passe (scrypt), session en cookie `HttpOnly`/`SameSite=Lax`, en-tête anti-CSRF, limitation des tentatives | Inscriptions fermées après le premier compte ; les personnes invitées entrent par un lien signé (HMAC) |
 | Lecture d’images | Claude (`claude-opus-5-5`) appelé **depuis le serveur** via le SDK Anthropic ; secours `local` (OCR Tesseract hors ligne) | La clé ne quitte jamais le serveur |
 | Confidentialité des images | OCR local → numéros de carte masqués en noir **avant** l’envoi ; métadonnées (GPS) retirées ; images servies seulement au propriétaire ; supprimées après validation | |
 | Rappels | Web Push (VAPID) + planificateur côté serveur toutes les 30 s | Livrés même quand l’app est fermée (voir limites) |
@@ -18,6 +18,7 @@ Application personnelle (PWA) qui réunit l’agenda, les objectifs et le budget
 server/
   app.ts               routes API
   services/events.ts   agenda, récurrences, exceptions d'occurrence
+  services/sharing.ts  agenda partagé : accès, invitations, « Occupé », participants
   services/planner.ts  « Réorganiser ma journée »
   services/goals.ts    progression, historique semaine/mois
   services/budget.ts   enveloppes, transactions, ventilations, catégorisation, doublons
@@ -121,6 +122,8 @@ Il faut **HTTPS** (notifications, installation sur iPhone, cookies `Secure`) et 
 **Aujourd’hui** – prochain rendez-vous, 3 priorités (★ pour choisir, sinon les plus urgentes), tâches du jour, objectifs à cocher, nombre de dépenses en attente, alerte de surcharge, boutons Tâche / Événement / Dépense. « Dépense » ouvre le chatbot avec le champ prêt à écrire.
 
 **Agenda** – vues jour et semaine ; glisser la poignée ⋮⋮ pour déplacer (aussi d’un jour à l’autre en vue semaine), tirer le bas du bloc pour la durée ; événements récurrents (jour, semaine avec jours choisis, mois, date de fin) avec « cette occurrence / toute la série ». Rendez-vous fixes (bleu, plein) et tâches flexibles (vert, pointillé) avec durée estimée, échéance, priorité, plage préférée. Bouton « Se prolonge +15/+30/+45 » sur un rendez-vous, puis **Réorganiser ma journée** : proposition respectant les fixes, les pauses choisies et un battement entre blocs, aperçu avant/après, acceptation ligne par ligne, tâches qui ne rentrent pas avec un autre créneau proposé (jours suivants) ou « demain, à placer ».
+
+**Agenda partagé** – chacun garde son agenda et peut le partager avec d’autres comptes (Agenda → bouton personnes, ou Réglages → Partager mon agenda). Trois accès : **Peut modifier** (voit tout, ajoute et modifie), **Peut voir** (tous les détails), **Occupé seulement** (plages prises, sans titre). Inviter par courriel crée un lien à usage unique valable 14 jours, réservé à ce courriel, à envoyer soi-même (Messages, courriel… ; l’app n’envoie pas de courriel). Un **lien d’invitation** réutilisable (accès « Peut voir ») s’active ou se coupe d’un geste. Une invitation permet de créer un compte même quand les inscriptions sont fermées (`ALLOW_SIGNUP=false`). Dans l’agenda, une couleur par personne (choisie dans Réglages), des pastilles pour afficher ou masquer chacun, les avatars des participants sur les blocs. Un événement peut avoir des **participants** : ils le voient dans leur agenda et en reçoivent les rappels, même sans accès au reste. Chaque événement peut être marqué « Occupé seulement » pour les autres. Retirer une personne coupe son accès et ses participations tout de suite ; on peut aussi quitter l’agenda de quelqu’un. Les tâches à placer, objectifs, priorités et « Réorganiser » restent personnels.
 
 **Objectifs** – ponctuels ou récurrents (jour, semaine, mois), à cocher, quantité, durée, montant, échéance et rappel. Un objectif peut être lié à plusieurs blocs ; en terminant un bloc on saisit le résultat réel (ex. 45 min sur 60 prévues). Progression, reste à faire, historique par semaine ou par mois.
 
