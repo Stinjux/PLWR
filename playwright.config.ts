@@ -27,6 +27,7 @@ export default defineConfig({
       DATA_DIR: 'tests/.data',
       VISION_PROVIDER: 'local',
       ALLOW_SIGNUP: 'true',
+      MAX_USERS: '1000',
       SCHEDULER_INTERVAL_MS: '3000',
       APP_SECRET: 'secret-de-test',
     },

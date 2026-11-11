@@ -288,6 +288,8 @@ export function Settings() {
           </ul>
         </section>
 
+        {me.isAdmin && <StorageCard />}
+
         <section className="card">
           <h2>Compte</h2>
           <div className="small muted">
@@ -332,6 +334,77 @@ function SyncCard({ provider, label, status, pitch, onOpen }: { provider: string
       <button className={`btn block${status?.connected ? '' : ' primary'}`} style={{ marginTop: 12 }} onClick={onOpen}>
         {status?.connected ? 'Gérer la synchronisation' : `Connecter ${label} (guide pas à pas)`}
       </button>
+    </section>
+  );
+}
+
+/** Données et sauvegardes : état du stockage, nombre de comptes, copies quotidiennes, téléchargement. */
+function StorageCard() {
+  const toast = useToast();
+  const q = useQuery({ queryKey: ['admin-storage'], queryFn: () => api.get<any>('/api/admin/storage') });
+  const d = q.data;
+  if (!d) return null;
+  const last = d.backups[0];
+  return (
+    <section className="card stack" data-testid="storage-card">
+      <h2 style={{ margin: 0 }}>Données et sauvegardes</h2>
+      <div className="row" style={{ gap: 12 }}>
+        <span className={`status-dot${d.persistent ? ' on' : ' warn'}`} aria-hidden="true" />
+        <div className="grow small">
+          {d.persistent ? (
+            <>Les données sont sur un disque permanent : elles survivent aux mises à jour.</>
+          ) : (
+            <>
+              <strong className="error">Les données ne sont pas sauvegardées.</strong> Elles seront effacées à la prochaine mise à jour de Railway.
+            </>
+          )}
+        </div>
+      </div>
+      {!d.persistent && (
+        <ol className="small" style={{ margin: 0, paddingLeft: '1.3em', display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <li>
+            Dans Railway, clique sur ton service → onglet <b>Settings</b> → <b>Volumes</b> (ou clic droit sur le service → <b>Attach volume</b>).
+          </li>
+          <li>
+            Point de montage : <code>/data</code> → <b>Ajouter</b>. Railway redéploie tout seul.
+          </li>
+          <li>Recrée ton compte une dernière fois : à partir de là, tout est conservé.</li>
+        </ol>
+      )}
+      {!d.appSecretFromEnv && (
+        <div className="banner small">
+          <span>
+            Ajoute aussi la variable <code>APP_SECRET</code> dans Railway (onglet Variables) : sans elle, les connexions Google et Outlook seraient à refaire si le serveur change.
+          </span>
+        </div>
+      )}
+      <div className="stats">
+        <div className="stat">
+          <span className="v">
+            {d.users}/{d.maxUsers}
+          </span>
+          <span className="tiny muted">comptes</span>
+        </div>
+        <div className="stat">
+          <span className="v">{d.backups.length}</span>
+          <span className="tiny muted">copies (7 jours)</span>
+        </div>
+        <div className="stat">
+          <span className="v">{last ? dayLabel(dt(last.at).toISODate()!) : '—'}</span>
+          <span className="tiny muted">dernière copie</span>
+        </div>
+      </div>
+      <p className="tiny muted" style={{ margin: 0 }}>
+        PLWR fait une copie par jour sur le serveur. Télécharge-en une de temps en temps pour l’avoir aussi ailleurs.
+      </p>
+      <div className="stack" style={{ gap: 8 }}>
+        <a className="btn primary block" href="/api/admin/backup/download" download>
+          <Icon.upload style={{ transform: 'rotate(180deg)' }} /> Télécharger une sauvegarde
+        </a>
+        <button className="btn block" onClick={async () => (await api.post('/api/admin/backup'), q.refetch(), toast('Copie faite sur le serveur'))}>
+          Faire une copie maintenant
+        </button>
+      </div>
     </section>
   );
 }

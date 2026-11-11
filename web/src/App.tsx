@@ -28,6 +28,7 @@ export type Me = {
   vision: { provider: string; configured: boolean; redactCardNumbers: boolean };
   hasSamples: boolean;
   today: string;
+  isAdmin: boolean;
   onboarding: { profile: boolean; expenses: 'done' | 'skipped' | null; savings: 'done' | 'skipped' | null; completedAt: string | null; monthlySalaryCents: number | null; profileData: any };
 };
 

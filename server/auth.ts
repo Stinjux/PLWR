@@ -100,10 +100,22 @@ export function userFromRequest(c: Context): User | undefined {
   return loadUser(s.user_id);
 }
 
+/** Session glissante : utilisée régulièrement, elle ne expire jamais (prolongée de 30 jours quand il en reste moins de 15). */
+function renewSession(c: Context) {
+  const token = getCookie(c, SESSION_COOKIE);
+  if (!token) return;
+  const s = get('SELECT * FROM sessions WHERE id = ?', sha256(token));
+  if (!s || s.expires_at > new Date(Date.now() + 15 * 86400_000).toISOString()) return;
+  const expires = new Date(Date.now() + SESSION_DAYS * 86400_000);
+  run('UPDATE sessions SET expires_at = ? WHERE id = ?', expires.toISOString(), s.id);
+  setCookie(c, SESSION_COOKIE, token, { httpOnly: true, secure: config.cookieSecure, sameSite: 'Lax', path: '/', expires });
+}
+
 /** Middleware : exige une session valide et un en-tête anti-CSRF sur les requêtes qui modifient des données. */
 export async function requireUser(c: Context, next: Next) {
   const user = userFromRequest(c);
   if (!user) throw new HTTPException(401, { message: 'Connexion requise' });
+  renewSession(c);
   if (!['GET', 'HEAD', 'OPTIONS'].includes(c.req.method) && c.req.header('x-plwr') !== '1') {
     throw new HTTPException(403, { message: 'Requête refusée (CSRF)' });
   }

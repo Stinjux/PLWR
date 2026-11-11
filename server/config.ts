@@ -29,6 +29,8 @@ export const config = {
   appSecret: '',
   cookieSecure: bool(env.COOKIE_SECURE, isProd),
   allowSignup: bool(env.ALLOW_SIGNUP, false),
+  /** Nombre maximal de comptes (inscriptions et invitations comprises). */
+  maxUsers: Math.max(1, Number(env.MAX_USERS || 6)),
   defaultTimezone: env.DEFAULT_TIMEZONE || 'America/Toronto',
   defaultCurrency: 'CAD',
 
@@ -89,6 +91,18 @@ function resolveSecret(): { value: string; source: 'env' | 'file' | 'generated' 
   } catch {}
   return { value, source: 'generated' };
 }
+/**
+ * Les données survivent-elles à un redéploiement ? Sur Railway, seulement si le dossier de données est sur un volume.
+ * Ailleurs, on suppose un disque persistant.
+ */
+const onRailway = Boolean(env.RAILWAY_ENVIRONMENT_NAME || env.RAILWAY_ENVIRONMENT);
+const volume = env.RAILWAY_VOLUME_MOUNT_PATH ? path.resolve(env.RAILWAY_VOLUME_MOUNT_PATH) : '';
+export const storage = {
+  onRailway,
+  persistent: env.DB_FILE !== ':memory:' && (!onRailway || Boolean(volume && config.dataDir.startsWith(volume))),
+  appSecretFromEnv: Boolean((env.APP_SECRET || '').trim()),
+};
+
 const secret = resolveSecret();
 config.appSecret = secret.value;
 export const appSecretSource = secret.source;
