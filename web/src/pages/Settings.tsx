@@ -288,6 +288,7 @@ export function Settings() {
           </ul>
         </section>
 
+        {me.isAdmin && <AdoptionCard />}
         {me.isAdmin && <StorageCard />}
 
         <section className="card">
@@ -436,6 +437,57 @@ function StorageCard() {
           Faire une copie maintenant
         </button>
       </div>
+    </section>
+  );
+}
+
+const PATH_LABEL: Record<string, string> = { week: 'Planifier ma semaine', goal: 'Suivre un objectif', expense: 'Gérer mes dépenses', explore: 'Explorer l’app', 'sans choix': 'Sans choix' };
+const rate = (v: number | null, d?: number) => (v === null ? '—' : `${v} %${d !== undefined ? ` (${d})` : ''}`);
+
+/** Adoption après l'accueil, par parcours : 1re action, retours J+1 et J+7, 2e action utile. Totaux seulement. */
+function AdoptionCard() {
+  const q = useQuery({ queryKey: ['admin-metrics'], queryFn: () => api.get<any>('/api/admin/metrics') });
+  const d = q.data;
+  if (!d) return null;
+  return (
+    <section className="card stack" data-testid="adoption-card">
+      <h2 style={{ margin: 0 }}>Adoption de l’accueil</h2>
+      {d.totalStarted === 0 ? (
+        <p className="small muted" style={{ margin: 0 }}>Pas encore de données : elles arrivent avec les prochains comptes créés.</p>
+      ) : (
+        <div className="table-scroll">
+          <table className="metrics">
+            <thead>
+              <tr>
+                <th scope="col">Parcours</th>
+                <th scope="col">Personnes</th>
+                <th scope="col">1re action</th>
+                <th scope="col">Délai médian</th>
+                <th scope="col">Retour J+1</th>
+                <th scope="col">Retour J+7</th>
+                <th scope="col">2e action utile</th>
+              </tr>
+            </thead>
+            <tbody>
+              {d.paths.map((p: any) => (
+                <tr key={p.path}>
+                  <th scope="row">{PATH_LABEL[p.path] || p.path}</th>
+                  <td>{p.started}</td>
+                  <td>{rate(p.firstActionRate)}</td>
+                  <td>{p.medianSecondsToFirstAction === null ? '—' : `${p.medianSecondsToFirstAction} s`}</td>
+                  <td>{rate(p.d1Rate, p.d1Eligible)}</td>
+                  <td>{rate(p.d7Rate, p.d7Eligible)}</td>
+                  <td>{rate(p.secondActionRate)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="tiny muted" style={{ margin: 0 }}>
+        Entre parenthèses : personnes inscrites depuis assez longtemps pour être comptées. Avec quelques comptes, lis ces chiffres comme des tendances. Ils restent dans PLWR et ne montrent
+        jamais le détail d’une personne.
+      </p>
     </section>
   );
 }

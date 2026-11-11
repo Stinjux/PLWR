@@ -29,7 +29,17 @@ export type Me = {
   hasSamples: boolean;
   today: string;
   isAdmin: boolean;
-  onboarding: { profile: boolean; expenses: 'done' | 'skipped' | null; savings: 'done' | 'skipped' | null; completedAt: string | null; monthlySalaryCents: number | null; profileData: any };
+  onboarding: {
+    profile: boolean;
+    expenses: 'done' | 'skipped' | null;
+    savings: 'done' | 'skipped' | null;
+    completedAt: string | null;
+    monthlySalaryCents: number | null;
+    profileData: any;
+    path: 'week' | 'goal' | 'expense' | 'explore' | null;
+    firstAction: { kind: 'event' | 'goal' | 'expense'; ref: string; label: string; at: string; when?: string | null } | null;
+    welcomeSeen: boolean;
+  };
 };
 
 type Ctx = {

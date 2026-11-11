@@ -5,6 +5,11 @@ import { formatMoney } from '../time.ts';
 import { googleStatus } from './google.ts';
 import { outlookStatus } from './outlook.ts';
 import { pendingCount } from './drafts.ts';
+import { createEvent } from './events.ts';
+import { parseExpenses } from './expenseParser.ts';
+import { insertTransaction, learnMerchant, listCategories, suggestCategory } from './budget.ts';
+import { PATHS, track, type Path } from './analytics.ts';
+import type { GoalDraft } from './goalInterpreter.ts';
 
 /**
  * Accueil (onboarding) et cloche « À faire / Alertes ».
@@ -16,7 +21,18 @@ import { pendingCount } from './drafts.ts';
 export type SalaryPeriod = 'year' | 'month' | 'biweekly' | 'week';
 export type Profile = { age: number; profession: string; salaryCents: number; salaryPeriod: SalaryPeriod; salaryType: 'gross' | 'net' };
 export type StepState = 'done' | 'skipped' | null;
-export type Onboarding = { profile: boolean; expenses: StepState; savings: StepState; savingsGoalId: string | null; completedAt: string | null };
+export type FirstAction = { kind: 'event' | 'goal' | 'expense'; ref: string; label: string; at: string; when?: string | null };
+export type Onboarding = {
+  profile: boolean;
+  expenses: StepState;
+  savings: StepState;
+  savingsGoalId: string | null;
+  completedAt: string | null;
+  /** Parcours choisi au premier écran : week, goal, expense ou explore. */
+  path: Path | null;
+  firstAction: FirstAction | null;
+  welcomeSeen: boolean;
+};
 
 const PERIODS: SalaryPeriod[] = ['year', 'month', 'biweekly', 'week'];
 const PER_MONTH: Record<SalaryPeriod, number> = { year: 1 / 12, month: 1, biweekly: 26 / 12, week: 52 / 12 };
@@ -40,6 +56,9 @@ export function onboardingState(userId: string): Onboarding & { profileData: Pro
     savings: o.savings ?? null,
     savingsGoalId: o.savingsGoalId ?? null,
     completedAt: o.completedAt ?? null,
+    path: o.path ?? null,
+    firstAction: o.firstAction ?? null,
+    welcomeSeen: Boolean(o.welcomeSeen),
     profileData: p,
     monthlySalaryCents: p ? Math.round(p.salaryCents * PER_MONTH[p.salaryPeriod]) : null,
   };
@@ -170,7 +189,106 @@ export function createSavingsGoal(user: User, b: any) {
 export function completeOnboarding(userId: string) {
   const st = onboardingState(userId);
   if (!st.profile) throw new Error('Termine d’abord ton profil');
-  setStep(userId, { completedAt: nowIso(), expenses: st.expenses ?? 'skipped', savings: st.savings ?? 'skipped' });
+  setStep(userId, { completedAt: nowIso(), expenses: st.expenses ?? 'skipped', savings: st.savings ?? 'skipped', path: st.path ?? 'explore' });
+  track(userId, 'onboarding_completed', { path: st.path ?? 'explore', firstAction: st.firstAction?.kind ?? null });
+  return onboardingState(userId);
+}
+
+// ---------- Parcours d'accueil : une seule action réelle ----------
+
+export function choosePath(userId: string, path: string) {
+  if (!(PATHS as readonly string[]).includes(path)) throw new Error('Parcours inconnu');
+  setStep(userId, { path: path as Path });
+  track(userId, 'path_chosen', { path });
+  return onboardingState(userId);
+}
+
+function recordFirstAction(user: User, fa: Omit<FirstAction, 'at'>) {
+  const st = onboardingState(user.id);
+  if (st.firstAction) return; // seule la première compte
+  setStep(user.id, { firstAction: { ...fa, at: nowIso() } });
+  track(user.id, 'first_action', { path: st.path, kind: fa.kind });
+}
+
+const whenLabel = (iso: string, tz: string) => {
+  const d = DateTime.fromISO(iso).setZone(tz);
+  const today = DateTime.now().setZone(tz).startOf('day');
+  const diff = Math.round(d.startOf('day').diff(today, 'days').days);
+  const day = diff === 0 ? 'aujourd’hui' : diff === 1 ? 'demain' : d.toFormat('cccc d LLLL', { locale: 'fr-CA' });
+  return `${day} à ${d.toFormat(d.minute ? "H 'h' mm" : "H 'h'")}`;
+};
+
+/** Planifier ma semaine : un événement. */
+export function onboardingEvent(user: User, b: any) {
+  const title = String(b.title || '').trim().slice(0, 120);
+  if (!title) throw new Error('Donne un titre à ton événement');
+  if (!b.start || Number.isNaN(Date.parse(b.start))) throw new Error('Choisis un jour et une heure');
+  const occ = createEvent(user.id, { title, kind: 'fixed', start: b.start, durationMin: Math.min(600, Math.max(15, Number(b.durationMin) || 60)), reminders: [] });
+  recordFirstAction(user, { kind: 'event', ref: occ.id, label: `${title} · ${whenLabel(occ.start!, user.timezone)}`, when: occ.start });
+  return occ;
+}
+
+/** Suivre un objectif : l'objectif défini (texte libre interprété) + sa première étape planifiée. */
+export function onboardingGoal(user: User, b: { goal: GoalDraft; step: { title?: string; start: string; durationMin?: number } }) {
+  const g = b.goal;
+  if (!g?.title?.trim()) throw new Error('Définis d’abord ton objectif');
+  if (!['check', 'quantity', 'duration', 'amount'].includes(g.metric) || !['once', 'daily', 'weekly', 'monthly'].includes(g.period)) throw new Error('Objectif invalide');
+  if (!b.step?.start || Number.isNaN(Date.parse(b.step.start))) throw new Error('Choisis quand faire la première étape');
+  const goalId = uid();
+  {
+    run(
+      'INSERT INTO goals (id, user_id, title, metric, target, unit, period, start_date, deadline, reminder_days, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+      goalId, user.id, String(g.title).slice(0, 120), g.metric, Math.max(0.01, Number(g.target) || 1), String(g.unit || '').slice(0, 20), g.period,
+      DateTime.now().setZone(user.timezone).toISODate(), g.deadline && /^\d{4}-\d{2}-\d{2}$/.test(g.deadline) ? g.deadline : null, g.deadline ? 7 : null, nowIso(),
+    );
+    const stepTitle = String(b.step.title || g.firstStep?.title || g.title).trim().slice(0, 120);
+    let occ;
+    try {
+      occ = createEvent(user.id, { title: stepTitle, kind: 'flexible', start: b.step.start, durationMin: Math.min(240, Math.max(10, Number(b.step.durationMin) || 30)), reminders: [], goalIds: [goalId] });
+    } catch (e) {
+      run('DELETE FROM goals WHERE id = ?', goalId); // pas d'objectif orphelin si l'étape échoue
+      throw e;
+    }
+    if (g.kind === 'financial') setStep(user.id, { savings: 'done', savingsGoalId: goalId });
+    recordFirstAction(user, { kind: 'goal', ref: occ.id, label: `${stepTitle} · ${whenLabel(occ.start!, user.timezone)}`, when: occ.start });
+    return { goalId, event: occ };
+  }
+}
+
+/** Gérer mes dépenses : analyse d'une phrase (montant, commerçant, date, catégorie proposée), sans rien enregistrer. */
+export function previewExpense(user: User, text: string) {
+  const t = String(text || '').trim().slice(0, 300);
+  const item = parseExpenses(t, user.timezone).items[0];
+  if (!item || !item.amountCents) throw new Error('Je n’ai pas trouvé de montant. Exemple : « 12,50 $ café ce matin chez Tim Hortons »');
+  const s = suggestCategory(user.id, item.merchant || '', t, item.budgetKey);
+  const categories = listCategories(user.id).filter((c) => c.kind === 'expense' && c.budgetKey === 'perso').map((c) => ({ id: c.id, label: c.label }));
+  const fallback = categories.find((c) => /Autre/.test(c.label))?.id || categories[0]?.id || null;
+  return {
+    amountCents: item.amountCents,
+    merchant: item.merchant,
+    date: item.date,
+    dateLabel: item.dateLabel,
+    categoryId: s.categoryId && categories.some((c) => c.id === s.categoryId) ? s.categoryId : fallback,
+    categoryConfident: Boolean(s.categoryId) && s.confidence !== 'low',
+    categoryReason: s.reason,
+    categories,
+  };
+}
+
+export function confirmExpense(user: User, b: any) {
+  const amountCents = Math.round(Number(b.amountCents));
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(b.date || '') ? b.date : DateTime.now().setZone(user.timezone).toISODate()!;
+  const merchant = String(b.merchant || '').trim().slice(0, 80) || 'Dépense';
+  if (!(amountCents > 0)) throw new Error('Indique un montant');
+  if (!b.categoryId) throw new Error('Choisis une catégorie');
+  const id = insertTransaction(user.id, { date, merchant, amountCents, type: 'expense', splits: [{ categoryId: b.categoryId, amountCents }], source: 'accueil' });
+  if (b.merchant) learnMerchant(user.id, merchant, b.categoryId);
+  recordFirstAction(user, { kind: 'expense', ref: id, label: `${merchant} · ${formatMoney(amountCents)}`, when: null });
+  return { id };
+}
+
+export function markWelcomeSeen(userId: string) {
+  setStep(userId, { welcomeSeen: true });
   return onboardingState(userId);
 }
 

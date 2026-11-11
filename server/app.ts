@@ -105,7 +105,15 @@ import {
   monthlyExpenses,
   onboardingState,
   saveProfile,
+  choosePath,
+  confirmExpense,
+  markWelcomeSeen,
+  onboardingEvent,
+  onboardingGoal,
+  previewExpense,
 } from './services/onboarding.ts';
+import { CLIENT_EVENTS, adoptionMetrics, touch, track, trackOnce, useful } from './services/analytics.ts';
+import { interpretGoal } from './services/goalInterpreter.ts';
 import { formatMoney } from './time.ts';
 
 export const app = new Hono();
@@ -261,8 +269,28 @@ api.use('*', requireUser);
 
 const U = (c: any): User => c.get('user');
 
+/** Actions utiles (mesure d'adoption) : enregistrées après une réponse réussie. */
+const USEFUL: [RegExp, string][] = [
+  [/^\/api\/goals$/, 'goal'],
+  [/^\/api\/goals\/[^/]+\/(entries|check)$/, 'goal_progress'],
+  [/^\/api\/events\/[^/]+\/complete$/, 'goal_progress'],
+  [/^\/api\/transactions$/, 'expense'],
+  [/^\/api\/drafts\/[^/]+\/confirm$/, 'expense'],
+  [/^\/api\/drafts\/confirm-many$/, 'expense'],
+  [/^\/api\/recurring$/, 'recurring'],
+  [/^\/api\/onboarding\/expenses$/, 'recurring'],
+  [/^\/api\/onboarding\/savings$/, 'goal'],
+];
+api.use('*', async (c, next) => {
+  await next();
+  if (c.req.method !== 'POST' || c.res.status >= 300) return;
+  const hit = USEFUL.find(([re]) => re.test(c.req.path));
+  if (hit) useful(U(c).id, hit[1]);
+});
+
 api.get('/me', (c) => {
   const u = U(c);
+  touch(u);
   return c.json({
     user: { id: u.id, email: u.email, name: u.name, timezone: u.timezone, color: colorOf({ id: u.id, settings: JSON.stringify(u.settings) }) },
     settings: u.settings,
@@ -279,6 +307,10 @@ api.get('/me', (c) => {
 const requireAdmin = (c: any) => {
   if (!isAdmin(U(c).id)) throw new HTTPException(403, { message: 'Réservé à la personne qui administre PLWR' });
 };
+api.get('/admin/metrics', (c) => {
+  requireAdmin(c);
+  return c.json(adoptionMetrics());
+});
 api.get('/admin/storage', (c) => {
   requireAdmin(c);
   return c.json({ ...storage, users: userCount(), maxUsers: config.maxUsers, backups: listBackups() });
@@ -311,6 +343,26 @@ api.post('/onboarding/step', async (c) => {
 });
 api.post('/onboarding/savings', async (c) => c.json(createSavingsGoal(U(c), await body(c)), 201));
 api.post('/onboarding/complete', (c) => c.json(completeOnboarding(U(c).id)));
+api.post('/onboarding/path', async (c) => c.json(choosePath(U(c).id, (await body<{ path: string }>(c)).path)));
+api.post('/onboarding/event', async (c) => c.json(onboardingEvent(U(c), await body(c)), 201));
+api.post('/onboarding/goal/interpret', async (c) => c.json(await interpretGoal((await body<{ text: string }>(c)).text, U(c).timezone)));
+api.post('/onboarding/goal', async (c) => c.json(onboardingGoal(U(c), await body(c)), 201));
+api.post('/onboarding/expense/preview', async (c) => c.json(previewExpense(U(c), (await body<{ text: string }>(c)).text)));
+api.post('/onboarding/expense', async (c) => c.json(confirmExpense(U(c), await body(c)), 201));
+api.post('/onboarding/welcome-seen', (c) => {
+  track(U(c).id, 'welcome_dismissed');
+  return c.json(markWelcomeSeen(U(c).id));
+});
+
+/** Événements envoyés par l'interface (liste fermée). */
+api.post('/track', async (c) => {
+  const b = await body<{ name: string; props?: Record<string, unknown> }>(c);
+  if (!CLIENT_EVENTS.includes(b.name)) throw new HTTPException(400, { message: 'Événement inconnu' });
+  const props = Object.fromEntries(Object.entries(b.props || {}).filter(([, v]) => ['string', 'number', 'boolean'].includes(typeof v)).slice(0, 8));
+  if (b.name === 'onboarding_started') trackOnce(U(c).id, b.name, props);
+  else track(U(c).id, b.name, props);
+  return c.json({ ok: true });
+});
 
 // ---------- Cloche : tâches à faire et alertes ----------
 api.get('/inbox', (c) => c.json(inbox(U(c))));
@@ -405,6 +457,7 @@ api.post('/events', async (c) => {
   const owner = ownerId === u.id ? u : loadUser(ownerId)!;
   if (b.reminders === undefined && b.start) b.reminders = [owner.settings.defaultReminderMinutes];
   const created = createEvent(ownerId, b);
+  useful(u.id, b.kind === 'flexible' ? 'task' : 'event');
   queueSync(ownerId);
   queueOutlookSync(ownerId);
   return c.json(occurrenceFor(u.id, created.id), 201);
