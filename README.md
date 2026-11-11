@@ -21,7 +21,9 @@ server/
   services/sharing.ts  agenda partagé : accès, invitations, « Occupé », participants
   services/google.ts   synchronisation Google Agenda (OAuth, import, envoi)
   services/outlook.ts  synchronisation Outlook (Microsoft Graph)
-  services/onboarding.ts accueil (profil, dépenses mensuelles, épargne) et cloche
+  services/onboarding.ts accueil (3 parcours, profil) et cloche
+  services/goalInterpreter.ts objectif écrit librement → objectif mesurable (Claude, ou règles locales)
+  services/analytics.ts mesure de l'adoption (1re action, J+1, J+7, 2e action)
   services/planner.ts  « Réorganiser ma journée »
   services/goals.ts    progression, historique semaine/mois
   services/budget.ts   enveloppes, transactions, ventilations, catégorisation, doublons
@@ -132,12 +134,25 @@ Il faut **HTTPS** (notifications, installation sur iPhone, cookies `Secure`) et 
 - **Avertissements** : si les données ne sont pas sur un volume Railway, la page de connexion et Réglages le signalent en rouge.
 - **Sauvegardes** : une copie de la base par jour dans `DATA_DIR/backups` (7 gardées). Réglages → Données et sauvegardes, réservé au premier compte, permet de télécharger une sauvegarde complète.
 
-**Accueil (onboarding)** – après la création du compte, en trois étapes :
-1. **Profil, obligatoire** : prénom, âge, profession et salaire (par année, par mois, aux 2 semaines ou par semaine, brut ou net). Un salaire net avec une date de paie devient un revenu récurrent, ce qui alimente « Jusqu’à la prochaine paie ».
-2. **Dépenses fixes mensuelles** (facultatif) : loyer, Hydro, Internet, cellulaire, assurances, garderie… Elles deviennent des paiements récurrents du budget, avec un rappel 2 jours avant.
-3. **Objectif d’épargne** (facultatif) : un montant par mois, ou une somme d’ici une date. PLWR suggère 10 % du revenu net, ou un fonds d’urgence de 3 mois de dépenses fixes.
+**Accueil (onboarding)** – trois écrans au plus, mobile d’abord, un bouton principal par écran et un lien « Explorer l’app » toujours visible :
+1. **« Qu’est-ce que tu veux organiser en premier ? »** Planifier ma semaine, Suivre un objectif ou Gérer mes dépenses.
+2. **Une seule action réelle,** selon le choix :
+   - un événement (titre, jour, heure, durée) ;
+   - un objectif choisi parmi des idées (finances ou personnel) ou écrit librement, que Claude rend mesurable, avec sa première étape planifiée (règles locales sans clé API) ;
+   - une dépense écrite en langage courant (« 12,50 $ café ce matin chez Tim Hortons »), avec montant, catégorie, commerçant et date proposés, à confirmer ou corriger.
+3. **Profil obligatoire :**
+   - prénom et âge ;
+   - profession, dans une liste qui se filtre pendant qu’on tape, avec un choix « Autre » ;
+   - salaire annuel, sur une jauge de 0 à 250 k$ ou en montant exact, brut ou net.
 
-Le profil se modifie ensuite dans Réglages.
+Ensuite, le tableau de bord affiche la **bienvenue** : le résultat de l’action, comment l’app s’utilise (Aujourd’hui, la barre de navigation, la cloche) et une **prochaine action** liée au parcours (rappel pour l’événement ou la première étape, ou dépenses de la semaine). La permission des notifications n’est demandée que lorsqu’on choisit un rappel.
+
+**Mesure de l’adoption** – dans la base de PLWR seulement, sans service tiers, avec des totaux par parcours dans Réglages (premier compte) :
+- la première action réelle et le délai médian pour l’obtenir ;
+- le retour à J+1 et à J+7 ;
+- la deuxième action utile (événement, objectif, progrès, dépense, paiement récurrent).
+
+**Thème** – bleu nuit : fond presque noir, surfaces marine, un bleu franc pour les actions ; contrastes vérifiés pour la lecture.
 
 **Cloche (en haut à droite)** – une pastille compte ce qui attend :
 - **À faire** : synchroniser ses agendas, terminer ses dépenses mensuelles, choisir son objectif d’épargne, avec la progression.

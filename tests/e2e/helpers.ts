@@ -19,16 +19,21 @@ export async function signup(page: Page) {
   return email;
 }
 
-/** Accueil : profil obligatoire, puis dépenses et épargne remises à plus tard. */
+/** Accueil : « Explorer l'app », puis le profil obligatoire. */
 export async function finishOnboarding(page: Page) {
-  await expect(page.getByRole('heading', { name: 'Faisons connaissance' })).toBeVisible();
-  await page.getByLabel('Âge').fill('34');
-  await page.getByLabel('Profession').fill('Analyste');
-  await page.getByLabel('Salaire', { exact: true }).fill('62000');
-  await page.getByRole('button', { name: 'Continuer' }).click();
-  await page.getByRole('button', { name: 'Je finirai plus tard' }).click();
-  await page.getByRole('button', { name: 'Plus tard' }).click();
-  await page.getByRole('button', { name: 'Commencer' }).click();
+  await expect(page.getByRole('heading', { name: 'Qu’est-ce que tu veux organiser en premier ?' })).toBeVisible();
+  await page.getByRole('button', { name: 'Explorer l’app' }).click();
+  await fillProfile(page);
+}
+
+/** Écran profil : âge, profession (liste filtrée), salaire, puis Terminer. */
+export async function fillProfile(page: Page, opts: { age?: string; search?: string; profession?: string; salary?: string } = {}) {
+  await expect(page.getByRole('heading', { name: 'Dernière étape : toi' })).toBeVisible();
+  await page.getByLabel('Âge').fill(opts.age || '34');
+  await page.getByRole('combobox', { name: 'Profession' }).fill(opts.search || 'analyste');
+  await page.getByRole('option', { name: opts.profession || 'Analyste de données', exact: true }).click();
+  await page.getByLabel('Montant exact du salaire annuel').fill(opts.salary || '62000');
+  await page.getByRole('button', { name: 'Terminer' }).click();
 }
 
 /** Capture bancaire synthétique : trois transactions d'aujourd'hui + un numéro de carte visible. */

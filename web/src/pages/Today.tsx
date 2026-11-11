@@ -7,6 +7,7 @@ import { useApp } from '../App';
 import { Check, Icon, Progress, useToast } from '../components/ui';
 import { ReorganizeDialog } from '../components/ReorganizeDialog';
 import type { Occ } from '../components/EventEditor';
+import { WelcomeCard } from '../components/WelcomeCard';
 
 type TodayData = {
   date: string;
@@ -58,6 +59,8 @@ export function Today() {
           <Icon.settings />
         </button>
       </div>
+
+      <WelcomeCard />
 
       <div className="quick-actions" style={{ marginBottom: 12 }}>
         <button className="btn" onClick={() => openEditor({ mode: 'new', kind: 'flexible', planDate: d?.date })}>
