@@ -19,6 +19,8 @@ server/
   app.ts               routes API
   services/events.ts   agenda, récurrences, exceptions d'occurrence
   services/sharing.ts  agenda partagé : accès, invitations, « Occupé », participants
+  services/google.ts   synchronisation Google Agenda (OAuth, import, envoi)
+  services/outlook.ts  synchronisation Outlook (Microsoft Graph)
   services/planner.ts  « Réorganiser ma journée »
   services/goals.ts    progression, historique semaine/mois
   services/budget.ts   enveloppes, transactions, ventilations, catégorisation, doublons
@@ -124,6 +126,38 @@ Il faut **HTTPS** (notifications, installation sur iPhone, cookies `Secure`) et 
 **Agenda** – vues jour et semaine ; glisser la poignée ⋮⋮ pour déplacer (aussi d’un jour à l’autre en vue semaine), tirer le bas du bloc pour la durée ; événements récurrents (jour, semaine avec jours choisis, mois, date de fin) avec « cette occurrence / toute la série ». Rendez-vous fixes (bleu, plein) et tâches flexibles (vert, pointillé) avec durée estimée, échéance, priorité, plage préférée. Bouton « Se prolonge +15/+30/+45 » sur un rendez-vous, puis **Réorganiser ma journée** : proposition respectant les fixes, les pauses choisies et un battement entre blocs, aperçu avant/après, acceptation ligne par ligne, tâches qui ne rentrent pas avec un autre créneau proposé (jours suivants) ou « demain, à placer ».
 
 **Agenda partagé** – chacun garde son agenda et peut le partager avec d’autres comptes (Agenda → bouton personnes, ou Réglages → Partager mon agenda). Trois accès : **Peut modifier** (voit tout, ajoute et modifie), **Peut voir** (tous les détails), **Occupé seulement** (plages prises, sans titre). Inviter par courriel crée un lien à usage unique valable 14 jours, réservé à ce courriel, à envoyer soi-même (Messages, courriel… ; l’app n’envoie pas de courriel). Un **lien d’invitation** réutilisable (accès « Peut voir ») s’active ou se coupe d’un geste. Une invitation permet de créer un compte même quand les inscriptions sont fermées (`ALLOW_SIGNUP=false`). Dans l’agenda, une couleur par personne (choisie dans Réglages), des pastilles pour afficher ou masquer chacun, les avatars des participants sur les blocs. Un événement peut avoir des **participants** : ils le voient dans leur agenda et en reçoivent les rappels, même sans accès au reste. Chaque événement peut être marqué « Occupé seulement » pour les autres. Retirer une personne coupe son accès et ses participations tout de suite ; on peut aussi quitter l’agenda de quelqu’un. Les tâches à placer, objectifs, priorités et « Réorganiser » restent personnels.
+
+**Synchronisation Google Agenda** – chaque personne relie son propre Google Agenda (Réglages → Google Agenda) avec un **guide illustré de A à Z** :
+1. créer un projet Google Cloud ;
+2. activer l’API Google Calendar ;
+3. remplir l’écran de consentement OAuth (Externe, accès `calendar.events`, puis publier l’application) ;
+4. créer un client OAuth « Application Web » avec l’URI de redirection affichée par PLWR ;
+5. **importer ses variables** dans PLWR : le fichier JSON téléchargé, ou l’ID client et le code secret ;
+6. autoriser PLWR sur l’écran de consentement de Google ;
+7. c’est synchronisé.
+
+Ce qui se synchronise :
+- **Google → PLWR** : les événements avec une heure, de 30 jours en arrière à 365 jours en avant, en lecture seule. Les événements « toute la journée » sont ignorés et un événement privé arrive en « Occupé seulement ».
+- **PLWR → Google** (option) : ce qui est créé dans PLWR, récurrences et occurrences supprimées comprises. Une occurrence d’une série déplacée seule n’est pas reportée.
+- **Rythme** : toutes les 5 minutes (`GOOGLE_SYNC_MINUTES`), et quelques secondes après une modification.
+- **Partage** : les personnes qui partagent l’agenda voient aussi les événements Google, selon leur accès.
+
+Sécurité : le code secret et les jetons sont chiffrés (AES-256-GCM, clé dérivée d’`APP_SECRET` ; si `APP_SECRET` change, il faut reconnecter). Si `GOOGLE_CLIENT_ID` et `GOOGLE_CLIENT_SECRET` sont définis sur le serveur, ils servent par défaut et le guide se réduit à l’autorisation. Un client OAuth laissé « En test » chez Google expire après 7 jours : le guide indique de publier l’application.
+
+**Synchronisation Outlook** (Outlook.com, Hotmail, Live, Microsoft 365) – même principe que Google, par Microsoft Graph, avec son **guide illustré de A à Z** (Réglages → Outlook) :
+1. ouvrir les inscriptions d’applications dans Microsoft Entra ;
+2. inscrire l’application PLWR : comptes multilocataires et personnels, plateforme Web, URI de redirection affichée par PLWR ;
+3. choisir les autorisations déléguées `Calendars.ReadWrite` et `offline_access` (la fiche de consentement) ;
+4. créer un secret client et copier la colonne **Valeur** ;
+5. **importer ses variables** dans PLWR : ID d’application, valeur du secret, annuaire (`common` par défaut) ;
+6. accepter la fiche de consentement de Microsoft ;
+7. c’est synchronisé.
+
+Comportement :
+- **Comme pour Google** : import en lecture seule, envoi optionnel avec récurrences, synchro toutes les 5 minutes (`OUTLOOK_SYNC_MINUTES`) et après chaque modification.
+- **Propre à Outlook** : les occurrences supprimées dans PLWR sont aussi supprimées dans Outlook, et un secret client expiré est signalé clairement.
+- **Identifiants communs** : `OUTLOOK_CLIENT_ID`, `OUTLOOK_CLIENT_SECRET` et `OUTLOOK_TENANT` sur le serveur réduisent le guide à l’autorisation.
+- **Deux agendas** : on peut relier Google et Outlook en même temps, et chacun reçoit ce qui est créé dans PLWR.
 
 **Objectifs** – ponctuels ou récurrents (jour, semaine, mois), à cocher, quantité, durée, montant, échéance et rappel. Un objectif peut être lié à plusieurs blocs ; en terminant un bloc on saisit le résultat réel (ex. 45 min sur 60 prévues). Progression, reste à faire, historique par semaine ou par mois.
 

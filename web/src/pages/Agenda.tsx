@@ -428,7 +428,7 @@ export function Agenda() {
                         data-start={o.start}
                         data-owner={o.ownerId}
                         role="button"
-                        aria-label={`${o.title}, ${time(o.start)} à ${time(o.end)}${mine || !owner ? '' : ` · agenda de ${owner.name}`}`}
+                        aria-label={`${o.title}, ${time(o.start)} à ${time(o.end)}${mine || !owner ? '' : ` · agenda de ${owner.name}`}${o.source === 'google' ? ' · Google Agenda' : o.source === 'outlook' ? ' · Outlook' : ''}`}
                       >
                         {editable && (
                           <span className="grip" aria-hidden="true" data-testid="grip">

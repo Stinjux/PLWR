@@ -40,6 +40,8 @@ export type Occurrence = {
   /** details : visible en entier par les personnes qui ont accès ; busy : « Occupé » seulement. */
   visibility: 'details' | 'busy';
   participantIds: string[];
+  /** plwr : créé dans l'app ; google / outlook : importé de cet agenda (lecture seule ici). */
+  source: 'plwr' | 'google' | 'outlook';
 };
 
 const SEP = '::';
@@ -97,6 +99,7 @@ function rowToOcc(row: any, master?: any, recurrenceId?: string | null): Occurre
     ownerId: row.user_id,
     visibility: (master ?? row).visibility === 'busy' ? 'busy' : 'details',
     participantIds: participantIdsFor(master ? master.id : row.series_id || row.id),
+    source: ['google', 'outlook'].includes((master ?? row).source) ? (master ?? row).source : 'plwr',
   };
 }
 

@@ -366,3 +366,62 @@ textarea.input { min-height: 80px; resize: vertical; }
 @media (min-width: 900px) {
   .people-row { margin: 0 0 14px; padding: 2px; flex-wrap: wrap; overflow: visible; }
 }
+
+/* ---------- Google Agenda : statut et guide pas à pas ---------- */
+.status-dot { width: 12px; height: 12px; flex: none; border-radius: 6px; background: #c7c7cc; box-shadow: 0 0 0 4px color-mix(in srgb, #c7c7cc 25%, transparent); }
+.status-dot.on { background: var(--ok); box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 18%, transparent); }
+.status-dot.warn { background: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 18%, transparent); }
+.steps { display: flex; flex-direction: column; gap: 14px; counter-reset: none; }
+.step { background: var(--surface); border-radius: 20px; box-shadow: var(--shadow); padding: 18px 16px 18px; }
+.step.current { box-shadow: 0 0 0 2px var(--text); }
+.step-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.step-head h2 { margin: 0; font-size: 1.125rem; }
+.step-num { width: 32px; height: 32px; flex: none; border-radius: 16px; display: grid; place-items: center; background: var(--surface-2); font-weight: 700; font-size: 0.95rem; }
+.step.current .step-num { background: var(--text); color: var(--bg); }
+.step.done .step-num { background: var(--ok); color: #fff; }
+.step-num svg { width: 16px; height: 16px; }
+.step-body { display: flex; flex-direction: column; gap: 12px; }
+.step-body ol, .step-body .bullets { margin: 0; padding-left: 1.3em; display: flex; flex-direction: column; gap: 6px; font-size: 0.95rem; }
+.step-body code, .copy-box code { font: 0.85em ui-monospace, 'SF Mono', Menlo, monospace; background: var(--surface-2); padding: 1px 6px; border-radius: 6px; word-break: break-all; }
+.copy-box { display: flex; align-items: center; gap: 8px; padding: 10px 10px 10px 12px; border-radius: 14px; background: var(--surface-2); }
+.copy-box code { flex: 1; min-width: 0; background: transparent; padding: 0; }
+.shots-row { display: grid; gap: 12px; }
+@media (min-width: 700px) { .shots-row { grid-template-columns: 1fr 1fr; } }
+.shot { margin: 0; border-radius: 14px; overflow: hidden; background: var(--bg); box-shadow: 0 0 0 1px var(--border); font-size: 0.8rem; }
+.shot-bar { display: flex; align-items: center; gap: 5px; padding: 8px 10px; background: var(--surface-2); }
+.shot-bar span { width: 8px; height: 8px; border-radius: 4px; background: color-mix(in srgb, var(--muted) 45%, transparent); }
+.shot-bar em { margin-left: 8px; font-style: normal; font-size: 0.72rem; color: var(--muted); background: var(--surface); padding: 2px 10px; border-radius: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; }
+.shot-body { padding: 14px; display: flex; flex-direction: column; gap: 10px; background: var(--surface); }
+.shot figcaption, .shot > figcaption { padding: 8px 12px; font-size: 0.75rem; color: var(--muted); background: var(--surface); border-top: 1px solid var(--border); }
+.shot-title { font-size: 0.9rem; }
+.shot-field { display: flex; flex-direction: column; gap: 2px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; min-width: 0; }
+.shot-field small { font-size: 0.68rem; color: var(--muted); }
+.shot-field span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shot-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.shot-btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 8px; background: var(--text); color: var(--bg); font-weight: 600; }
+.shot-btn.ghost { background: transparent; color: var(--text); box-shadow: 0 0 0 1px var(--border); }
+.shot-line { display: block; height: 7px; border-radius: 4px; background: var(--surface-2); }
+.shot-search { padding: 8px 12px; border-radius: 999px; background: var(--surface-2); }
+.shot-card { display: flex; gap: 10px; align-items: center; padding: 10px; border: 1px solid var(--border); border-radius: 10px; }
+.shot-card .grow { display: flex; flex-direction: column; gap: 6px; }
+.shot-icon { width: 32px; height: 32px; border-radius: 8px; display: grid; place-items: center; background: var(--fixed-soft); color: var(--fixed); }
+.shot-icon svg { width: 18px; height: 18px; }
+.shot-radio { display: flex; gap: 14px; }
+.shot-radio span { padding: 4px 8px; border-radius: 6px; }
+.shot-check { display: flex; gap: 10px; align-items: center; padding: 8px; border-radius: 8px; }
+.shot-check .box { width: 18px; height: 18px; flex: none; border-radius: 4px; border: 1.5px solid var(--muted); display: grid; place-items: center; font-size: 12px; font-weight: 700; }
+.shot-check.hl .box { background: var(--fixed); border-color: var(--fixed); color: #fff; }
+.shot-check .grow, .shot-check > span:last-child { min-width: 0; flex: 1; }
+.shot-link { color: var(--fixed); text-decoration: underline; align-self: flex-start; padding: 2px 4px; border-radius: 6px; }
+.shot-menu { display: flex; flex-direction: column; gap: 4px; }
+/* Repère : l'élément sur lequel cliquer */
+.shot .hl { position: relative; outline: 2px solid #ff9f0a; outline-offset: 2px; border-radius: 8px; animation: pulse 1.8s ease-in-out infinite; }
+@keyframes pulse { 0%, 100% { outline-color: #ff9f0a; } 50% { outline-color: color-mix(in srgb, #ff9f0a 35%, transparent); } }
+@media (prefers-reduced-motion: reduce) { .shot .hl { animation: none; } }
+.dropzone { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 20px 12px; border-radius: 16px; border: 1.5px dashed color-mix(in srgb, var(--muted) 55%, transparent); background: var(--bg); cursor: pointer; color: var(--text); }
+.dropzone svg { width: 24px; height: 24px; color: var(--muted); }
+.divider-text { display: flex; align-items: center; gap: 10px; font-size: 0.8rem; color: var(--muted); }
+.divider-text::before, .divider-text::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+.shot-table { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px 8px; font-size: 0.72rem; }
+.shot-table span { padding: 3px 4px; border-radius: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shot-table span:nth-child(-n + 4) { color: var(--muted); font-weight: 600; }

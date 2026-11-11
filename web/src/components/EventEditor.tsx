@@ -37,6 +37,7 @@ export type Occ = {
   participantIds: string[];
   canEdit?: boolean;
   redacted?: boolean;
+  source?: 'plwr' | 'google' | 'outlook';
   nextReminders?: { fireAt: string; title: string; deferredByQuietHours: boolean; kind: string }[];
 };
 
@@ -140,7 +141,9 @@ function ReadOnlyEvent({ occ, people, onClose }: { occ: Occ; people: Person[]; o
           <span>
             {occ.redacted
               ? `${owner?.name || 'Cette personne'} partage seulement ses plages occupées.`
-              : `Tu peux consulter cet élément. Seules les personnes qui peuvent modifier l’agenda de ${owner?.name || 'son propriétaire'} peuvent le changer.`}
+              : occ.source === 'google' || occ.source === 'outlook'
+                ? `Événement venu de ${occ.source === 'google' ? 'Google Agenda' : 'Outlook'}${owner && !owner.me ? ` (${owner.name})` : ''} : modifie-le dans ${occ.source === 'google' ? 'Google Agenda' : 'Outlook'}, il se mettra à jour ici.`
+                : `Tu peux consulter cet élément. Seules les personnes qui peuvent modifier l’agenda de ${owner?.name || 'son propriétaire'} peuvent le changer.`}
           </span>
         </div>
       </div>
