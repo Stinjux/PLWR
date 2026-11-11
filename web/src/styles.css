@@ -234,9 +234,12 @@ textarea.input { min-height: 80px; resize: vertical; }
 .ev-block.done .b-title { text-decoration: line-through; }
 .ev-block.dragging { opacity: 0.85; z-index: 10; box-shadow: 0 8px 24px rgb(0 0 0 / 25%); }
 .ev-block .b-title { font-weight: 700; color: var(--text); }
-.ev-block .grip { position: absolute; left: 0; top: 0; bottom: 0; width: 16px; display: grid; place-items: center; cursor: grab; touch-action: none; color: inherit; opacity: 0.7; }
+.ev-block { cursor: grab; -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
+.ev-block.dragging { cursor: grabbing; }
+.ev-block .grip { position: absolute; left: 0; top: 0; bottom: 0; width: 16px; display: grid; place-items: center; color: inherit; opacity: 0.7; pointer-events: none; }
 .ev-block .grip svg { width: 12px; height: 12px; }
 .ev-block .resize { position: absolute; left: 0; right: 0; bottom: 0; height: 10px; cursor: ns-resize; touch-action: none; }
+@media (pointer: coarse) { .ev-block .resize { height: 16px; } }
 .ev-block .resize::after { content: ''; position: absolute; left: 50%; bottom: 3px; width: 22px; height: 3px; margin-left: -11px; border-radius: 3px; background: currentColor; opacity: 0.45; }
 .week .ev-block { font-size: 0.7rem; padding-left: 14px; }
 .week .ev-block .grip { width: 13px; }

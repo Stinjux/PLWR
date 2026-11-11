@@ -44,13 +44,12 @@ test('1. Déplacer une tâche : son rappel suit le nouvel horaire', async ({ pag
   await expect(page.getByTestId('next-reminder')).toContainText('09h50');
   await page.getByRole('button', { name: 'Fermer' }).click();
 
-  // Glisser la poignée d'une heure vers le bas (1 px = 1 min)
-  const grip = block.getByTestId('grip');
-  const box = (await grip.boundingBox())!;
-  await page.mouse.move(box.x + box.width / 2, box.y + 10);
+  // Attraper le bloc lui-même (au milieu) et le glisser d'une heure vers le bas (1 px = 1 min)
+  const box = (await block.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + 25);
   await page.mouse.down();
-  await page.mouse.move(box.x + box.width / 2, box.y + 40, { steps: 5 });
-  await page.mouse.move(box.x + box.width / 2, box.y + 70, { steps: 5 });
+  await page.mouse.move(box.x + box.width / 2, box.y + 55, { steps: 5 });
+  await page.mouse.move(box.x + box.width / 2, box.y + 85, { steps: 5 });
   await page.mouse.up();
   await expect(page.getByText(/Déplacé : 11h00–12h00 · rappel à 10h50/)).toBeVisible();
 
@@ -324,4 +323,46 @@ test('Agenda : cliquer-glisser une plage (comme Outlook) et régler la récurren
   await page.getByLabel('Titre', { exact: true }).fill('Course matinale');
   await page.getByRole('button', { name: 'Enregistrer' }).click();
   await expect(page.locator('[data-testid=block][data-title="Course matinale"]')).toHaveCount(3);
+});
+
+test('Agenda : glisser-déposer au doigt (appui long) et durée par le bas du bloc', async ({ page }) => {
+  await signup(page);
+  const d = DateTime.now().setZone(TZ).plus({ days: 1 }).toISODate();
+  const at = (hhmm: string) => DateTime.fromISO(`${d}T${hhmm}`, { zone: TZ }).toUTC().toISO()!;
+  await page.evaluate((s) => fetch('/api/events', { method: 'POST', headers: { 'x-plwr': '1', 'content-type': 'application/json' }, body: JSON.stringify({ title: 'Bloc tactile', kind: 'flexible', start: s, durationMin: 60 }) }), at('09:00'));
+  await nav(page, 'Agenda');
+  await page.getByRole('button', { name: 'Jour', exact: true }).click();
+  await page.getByRole('button', { name: 'Suivant' }).click();
+  const block = page.locator('[data-testid=block][data-title="Bloc tactile"]');
+  await block.scrollIntoViewIfNeeded();
+
+  // Vrais événements tactiles : appui long 0,5 s puis glisser de 120 px (2 h)
+  const cdp = await page.context().newCDPSession(page);
+  const b = (await block.boundingBox())!;
+  const x = b.x + b.width / 2, y = b.y + 30;
+  const touch = (type: string, yy: number) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y: yy }] } as any);
+  await touch('touchStart', y);
+  await page.waitForTimeout(500);
+  for (let i = 1; i <= 12; i++) {
+    await touch('touchMove', y + i * 10);
+    await page.waitForTimeout(16);
+  }
+  await touch('touchEnd', y + 120);
+  await expect(page.getByText(/Déplacé : 11h00–12h00/)).toBeVisible();
+  await expect(block).toHaveAttribute('data-start', at('11:00'));
+
+  // Un toucher rapide ouvre la fiche (pas de déplacement)
+  const b2 = (await block.boundingBox())!;
+  await touch('touchStart', b2.y + 30);
+  await touch('touchEnd', b2.y + 30);
+  await expect(page.getByRole('dialog', { name: 'Tâche' })).toBeVisible();
+  await page.getByRole('button', { name: 'Fermer' }).click();
+
+  // Durée à la souris : tirer le bas du bloc de 30 px (+30 min)
+  const r = (await block.getByTestId('resize').boundingBox())!;
+  await page.mouse.move(r.x + r.width / 2, r.y + r.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(r.x + r.width / 2, r.y + r.height / 2 + 30, { steps: 5 });
+  await page.mouse.up();
+  await expect(page.getByText(/Durée modifiée : 11h00–12h30/)).toBeVisible();
 });

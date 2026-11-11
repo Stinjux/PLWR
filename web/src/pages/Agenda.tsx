@@ -55,6 +55,7 @@ export function Agenda() {
   const gridRef = useRef<HTMLDivElement>(null);
   const [sel, setSel] = useState<Sel | null>(null);
   const selecting = useRef(false);
+  const suppressClick = useRef(false);
 
   const days = useMemo(() => {
     const d = DateTime.fromISO(date, { zone: TZ });
@@ -86,18 +87,37 @@ export function Agenda() {
     setDate(DateTime.fromISO(date).plus(view === 'day' ? { days: n } : { weeks: n }).toISODate()!);
   }
 
-  function startDrag(e: React.PointerEvent, o: Occ, mode: 'move' | 'resize') {
-    e.preventDefault();
-    e.stopPropagation();
-    const el = e.currentTarget as HTMLElement;
-    el.setPointerCapture(e.pointerId);
-    const y0 = e.clientY, x0 = e.clientX;
-    const colW = wrapRef.current ? (wrapRef.current.clientWidth - 46) / days.length : 100;
+  /**
+   * Glisser-déposer d'un bloc (comme Outlook) : on l'attrape n'importe où.
+   * Souris : le déplacement commence dès que le pointeur bouge. Doigt : appui long (0,3 s) puis glisser,
+   * un geste rapide fait défiler l'agenda. Le bas du bloc modifie la durée.
+   */
+  function startDrag(e: React.PointerEvent, o: Occ) {
+    if (e.button > 0 || o.status === 'cancelled') return;
+    e.stopPropagation(); // pas de sélection de plage sous un bloc
+    const mode: 'move' | 'resize' = (e.target as HTMLElement).closest('.resize') ? 'resize' : 'move';
+    const touch = e.pointerType !== 'mouse';
+    const wrap = wrapRef.current!;
+    const y0 = e.clientY, x0 = e.clientX, scroll0 = wrap.scrollTop;
+    const colW = (gridRef.current!.getBoundingClientRect().width - 46) / days.length;
     const s0 = dt(o.start!), e0 = dt(o.end!);
+    let active = false;
     let last: Preview | null = null;
-    const move = (ev: PointerEvent) => {
-      const dMin = Math.round((ev.clientY - y0) / PX / SNAP) * SNAP;
-      const dDay = view === 'week' && mode === 'move' ? Math.round((ev.clientX - x0) / colW) : 0;
+    let lastY = y0, lastX = x0;
+    let timer: number | undefined;
+    let raf = 0;
+
+    const begin = () => {
+      active = true;
+      selecting.current = true; // bloque le défilement au doigt
+      last = { id: o.id, start: o.start!, end: o.end! };
+      setPreview(last);
+      if (touch) navigator.vibrate?.(15);
+      autoScroll();
+    };
+    const update = () => {
+      const dMin = Math.round((lastY - y0 + (wrap.scrollTop - scroll0)) / PX / SNAP) * SNAP;
+      const dDay = view === 'week' && mode === 'move' ? Math.round((lastX - x0) / colW) : 0;
       let ns = s0, ne = e0;
       if (mode === 'move') {
         ns = s0.plus({ minutes: dMin, days: dDay });
@@ -106,13 +126,44 @@ export function Agenda() {
         ne = e0.plus({ minutes: dMin });
         if (ne.diff(s0, 'minutes').minutes < SNAP) ne = s0.plus({ minutes: SNAP });
       }
-      last = { id: o.id, start: ns.toUTC().toISO()!, end: ne.toUTC().toISO()! };
-      setPreview(last);
+      const next = { id: o.id, start: ns.toUTC().toISO()!, end: ne.toUTC().toISO()! };
+      if (!last || next.start !== last.start || next.end !== last.end) {
+        last = next;
+        setPreview(next);
+      }
+    };
+    // Défilement automatique près des bords de l'agenda
+    const autoScroll = () => {
+      if (!active) return;
+      const r = wrap.getBoundingClientRect();
+      const edge = 48;
+      const v = lastY < r.top + edge ? -Math.ceil((r.top + edge - lastY) / 4) : lastY > r.bottom - edge ? Math.ceil((lastY - (r.bottom - edge)) / 4) : 0;
+      if (v) {
+        wrap.scrollTop += v;
+        update();
+      }
+      raf = requestAnimationFrame(autoScroll);
+    };
+
+    const move = (ev: PointerEvent) => {
+      lastY = ev.clientY;
+      lastX = ev.clientX;
+      const dist = Math.hypot(ev.clientX - x0, ev.clientY - y0);
+      if (!active) {
+        if (touch) {
+          if (dist > 8) cleanup(); // l'utilisateur fait défiler
+        } else if (dist > 4) begin();
+        return;
+      }
+      update();
     };
     const up = async () => {
-      el.removeEventListener('pointermove', move);
-      el.removeEventListener('pointerup', up);
-      el.removeEventListener('pointercancel', up);
+      clearTimeout(timer);
+      const wasActive = active;
+      cleanup();
+      if (!wasActive) return; // simple clic / toucher : le onClick ouvre la fiche
+      suppressClick.current = true;
+      setTimeout(() => (suppressClick.current = false), 50);
       const p = last;
       if (!p || (p.start === o.start && p.end === o.end)) {
         setPreview(null);
@@ -133,10 +184,20 @@ export function Agenda() {
       await qc.invalidateQueries();
       setPreview(null);
     };
-    el.addEventListener('pointermove', move);
-    el.addEventListener('pointerup', up);
-    el.addEventListener('pointercancel', up);
+    function cleanup() {
+      active = false;
+      selecting.current = false;
+      cancelAnimationFrame(raf);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+    }
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+    if (touch) timer = window.setTimeout(begin, mode === 'resize' ? 0 : 300);
   }
+
 
   // Empêche le défilement pendant une sélection au doigt (écouteur non passif)
   useEffect(() => {
@@ -262,7 +323,7 @@ export function Agenda() {
       <div className="row tiny muted" style={{ marginBottom: 8, gap: 6, flexWrap: 'wrap' }}>
         <span className="chip fixed">Fixe</span>
         <span className="chip flex">Flexible</span>
-        <span>Glisser sur une zone libre : nouvelle plage (appui long au doigt) · ⋮⋮ déplacer · bas du bloc : durée</span>
+        <span>Glisser un bloc pour le déplacer, son bas pour la durée · glisser sur une zone libre pour créer (au doigt : appui long)</span>
       </div>
 
       <div className={`timeline-wrap${view === 'week' ? ' week' : ''}`} ref={wrapRef}>
@@ -317,14 +378,18 @@ export function Agenda() {
                         key={o.id}
                         className={`ev-block ${o.kind}${o.status === 'done' ? ' done' : ''}${dragging ? ' dragging' : ''}`}
                         style={{ top, height: h, left: `calc(${(l.lane / l.lanes) * 100}% + 3px)`, width: `calc(${100 / l.lanes}% - 6px)`, right: 'auto' }}
-                        onClick={(ev) => (ev.stopPropagation(), openEditor({ mode: 'edit', id: o.id }))}
+                        onPointerDown={(ev) => startDrag(ev, o)}
+                        onClick={(ev) => {
+                          ev.stopPropagation();
+                          if (!suppressClick.current) openEditor({ mode: 'edit', id: o.id });
+                        }}
                         data-testid="block"
                         data-title={o.title}
                         data-start={o.start}
                         role="button"
                         aria-label={`${o.title}, ${time(o.start)} à ${time(o.end)}`}
                       >
-                        <span className="grip" onPointerDown={(ev) => startDrag(ev, o, 'move')} onClick={(ev) => ev.stopPropagation()} aria-label={`Déplacer ${o.title}`} data-testid="grip">
+                        <span className="grip" aria-hidden="true" data-testid="grip">
                           <Icon.grip />
                         </span>
                         <div className="b-title ellipsis">
@@ -336,7 +401,7 @@ export function Agenda() {
                             {time(o.start)}–{time(o.end)}
                           </div>
                         )}
-                        <span className="resize" onPointerDown={(ev) => startDrag(ev, o, 'resize')} onClick={(ev) => ev.stopPropagation()} aria-label={`Modifier la durée de ${o.title}`} data-testid="resize" />
+                        <span className="resize" aria-label={`Modifier la durée de ${o.title}`} data-testid="resize" />
                       </div>
                     );
                   })}
