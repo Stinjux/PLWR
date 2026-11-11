@@ -360,6 +360,37 @@ function StorageCard() {
           )}
         </div>
       </div>
+      {d.persistent && d.diagnostic?.dataDirOverridden && (
+        <div className="banner small">
+          <span>
+            La variable <code>DATA_DIR</code> (<code>{d.diagnostic.dataDirFromEnv}</code>) n’était pas sur le volume : PLWR l’ignore et écrit sur le volume. Tu peux la supprimer dans Railway → Variables.
+          </span>
+        </div>
+      )}
+      {!d.persistent && d.diagnostic && (
+        <div className="banner small" data-testid="storage-diagnostic">
+          <span>
+            {d.diagnostic.volumeMountPath ? (
+              <>
+                Un volume est bien monté sur <code>{d.diagnostic.volumeMountPath}</code>, mais les données sont écrites dans <code>{d.diagnostic.dataDir}</code>
+                {d.diagnostic.dataDirFromEnv ? (
+                  <>
+                    {' '}
+                    à cause de la variable <code>DATA_DIR</code>. Dans Railway → Variables, <b>supprime DATA_DIR</b> (ou mets-la à <code>{d.diagnostic.volumeMountPath}</code>), puis redéploie.
+                  </>
+                ) : (
+                  '.'
+                )}
+              </>
+            ) : (
+              <>
+                Railway n’indique <b>aucun volume</b> sur ce service (données dans <code>{d.diagnostic.dataDir}</code>). Vérifie que le volume est attaché à <b>ce</b> service (et non à un autre du
+                projet), avec le point de montage <code>/data</code>, puis lance un nouveau déploiement : un volume ajouté pendant qu’une version tourne ne compte qu’au déploiement suivant.
+              </>
+            )}
+          </span>
+        </div>
+      )}
       {!d.persistent && (
         <ol className="small" style={{ margin: 0, paddingLeft: '1.3em', display: 'flex', flexDirection: 'column', gap: 4 }}>
           <li>

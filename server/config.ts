@@ -18,11 +18,20 @@ function bool(v: string | undefined, def: boolean): boolean {
 const railwayUrl = env.RAILWAY_PUBLIC_DOMAIN ? `https://${env.RAILWAY_PUBLIC_DOMAIN}` : '';
 const isProd = env.NODE_ENV === 'production' || Boolean(env.RAILWAY_ENVIRONMENT_NAME || env.RAILWAY_ENVIRONMENT);
 
+/**
+ * Dossier de données. Sur Railway avec un volume, les données vont TOUJOURS sur le volume : un DATA_DIR qui pointe
+ * ailleurs (souvent « ./data » recopié de .env.example) écrirait sur le disque temporaire, effacé à chaque déploiement.
+ */
+const volumePath = env.RAILWAY_VOLUME_MOUNT_PATH ? path.resolve(env.RAILWAY_VOLUME_MOUNT_PATH) : '';
+const isUnder = (dir: string, root: string) => dir === root || dir.startsWith(root + path.sep);
+const requestedDataDir = path.resolve(env.DATA_DIR || volumePath || './data');
+const dataDirOverridden = Boolean(volumePath) && !isUnder(requestedDataDir, volumePath);
+
 export const config = {
   isProd,
   port: Number(env.PORT || 3000),
   host: env.HOST || '0.0.0.0',
-  dataDir: path.resolve(env.DATA_DIR || env.RAILWAY_VOLUME_MOUNT_PATH || './data'),
+  dataDir: dataDirOverridden ? volumePath : requestedDataDir,
   /** URL publique de l'application (sert aux liens des notifications). */
   appUrl: (env.APP_URL || railwayUrl || 'http://localhost:3000').replace(/\/$/, ''),
   /** Secret pour signer les jetons « Reporter » des notifications (APP_SECRET, sinon généré et conservé dans DATA_DIR). */
@@ -93,14 +102,34 @@ function resolveSecret(): { value: string; source: 'env' | 'file' | 'generated' 
 }
 /**
  * Les données survivent-elles à un redéploiement ? Sur Railway, seulement si le dossier de données est sur un volume.
- * Ailleurs, on suppose un disque persistant.
+ * Deux indices : la variable RAILWAY_VOLUME_MOUNT_PATH (le dossier est dessous) ou un disque monté à part
+ * (le dossier n'est pas sur le même périphérique que la racine du conteneur). Ailleurs, on suppose un disque persistant.
  */
 const onRailway = Boolean(env.RAILWAY_ENVIRONMENT_NAME || env.RAILWAY_ENVIRONMENT);
-const volume = env.RAILWAY_VOLUME_MOUNT_PATH ? path.resolve(env.RAILWAY_VOLUME_MOUNT_PATH) : '';
+const underVolume = Boolean(volumePath) && isUnder(config.dataDir, volumePath);
+function onMountedDisk(dir: string): boolean {
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    return fs.statSync(dir).dev !== fs.statSync('/').dev;
+  } catch {
+    return false;
+  }
+}
+const mountedDisk = onMountedDisk(config.dataDir);
 export const storage = {
   onRailway,
-  persistent: env.DB_FILE !== ':memory:' && (!onRailway || Boolean(volume && config.dataDir.startsWith(volume))),
+  persistent: env.DB_FILE !== ':memory:' && (!onRailway || underVolume || mountedDisk),
   appSecretFromEnv: Boolean((env.APP_SECRET || '').trim()),
+  /** Diagnostic affiché à l'administrateur dans Réglages. */
+  diagnostic: {
+    dataDir: config.dataDir,
+    dataDirFromEnv: env.DATA_DIR || null,
+    volumeMountPath: env.RAILWAY_VOLUME_MOUNT_PATH || null,
+    underVolume,
+    mountedDisk,
+    /** DATA_DIR ignoré parce qu'il n'était pas sur le volume. */
+    dataDirOverridden,
+  },
 };
 
 const secret = resolveSecret();
