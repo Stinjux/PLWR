@@ -206,6 +206,12 @@ export function ShareSheet({ onClose }: { onClose: () => void }) {
           </p>
         </section>
 
+        <a className="banner info small" href="/reglages/google" style={{ textDecoration: 'none', color: 'inherit' }}>
+          <Icon.calendar style={{ width: 18, height: 18, flex: 'none' }} />
+          <span className="grow">Pour que tout soit synchronisé, chaque personne relie son Google Agenda : Réglages → Google Agenda (guide pas à pas).</span>
+          <Icon.chevronR style={{ width: 18, height: 18, flex: 'none' }} />
+        </a>
+
         {d && d.sharedWithMe.length > 0 && (
           <section>
             <h3 className="group-label">Agendas partagés avec moi</h3>

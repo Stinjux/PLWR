@@ -71,6 +71,17 @@ import {
   sharingState,
   visibleOccurrences,
 } from './services/sharing.ts';
+import {
+  authUrl,
+  clearCredentials,
+  disconnect as disconnectGoogle,
+  googleStatus,
+  handleCallback as googleCallback,
+  queueSync,
+  saveCredentials,
+  setExport,
+  syncUser,
+} from './services/google.ts';
 import { formatMoney } from './time.ts';
 
 export const app = new Hono();
@@ -94,7 +105,7 @@ app.onError((err, c) => {
   if (err instanceof HTTPException) return c.json({ error: err.message }, err.status);
   if (err instanceof VisionError) return c.json({ error: err.message, manualEntry: true }, 422);
   const msg = err instanceof Error ? err.message : 'Erreur';
-  if (!/introuvable|invalide|doit|manque|choisis|déjà|positif|inconnue|refus/i.test(msg)) console.error(err);
+  if (!/introuvable|invalide|doit|manque|choisis|déjà|positif|inconnue|refus|importe|connect|google/i.test(msg)) console.error(err);
   return c.json({ error: msg }, /introuvable/i.test(msg) ? 404 : 400);
 });
 
@@ -167,6 +178,22 @@ app.get('/api/invites/:token', (c) => {
   const d = describeInvite(c.req.param('token'));
   if (!d) throw new HTTPException(404, { message: 'Invitation invalide ou expirée' });
   return c.json(d);
+});
+
+// ---------- Retour de l'écran de consentement Google (navigation du navigateur, cookie de session) ----------
+app.get('/api/google/callback', async (c) => {
+  const back = (q: string) => c.redirect(`/reglages/google?${q}`);
+  const u = userFromRequest(c);
+  if (!u) return c.redirect('/?google=session');
+  const err = c.req.query('error');
+  if (err) return back(`erreur=${encodeURIComponent(err === 'access_denied' ? 'Tu as refusé l’accès sur l’écran de Google.' : `Google : ${err}`)}`);
+  try {
+    await googleCallback(u.id, c.req.query('code') || '', c.req.query('state') || '');
+    syncUser(u.id).catch(() => {});
+    return back('ok=1');
+  } catch (e) {
+    return back(`erreur=${encodeURIComponent(e instanceof Error ? e.message : 'Erreur Google')}`);
+  }
 });
 
 // ---------- Action « Reporter » d'une notification (jeton signé, sans cookie) ----------
@@ -258,7 +285,9 @@ api.get('/events', (c) => {
 /** Propriétaire de l'élément, en vérifiant que u peut le modifier. */
 function editableOwner(u: User, id: string): string {
   const ownerId = ownerOf(id);
-  if (!ownerId || !occurrenceFor(u.id, id)) throw new HTTPException(404, { message: 'Élément introuvable' });
+  const o = ownerId ? occurrenceFor(u.id, id) : undefined;
+  if (!ownerId || !o) throw new HTTPException(404, { message: 'Élément introuvable' });
+  if (o.source === 'google') throw new HTTPException(403, { message: 'Cet événement vient de Google Agenda : modifie-le dans Google Agenda, il se mettra à jour ici.' });
   if (!canEdit(u.id, ownerId)) throw new HTTPException(403, { message: 'Tu peux consulter cet agenda, mais pas le modifier' });
   return ownerId;
 }
@@ -282,6 +311,7 @@ api.post('/events', async (c) => {
   const owner = ownerId === u.id ? u : loadUser(ownerId)!;
   if (b.reminders === undefined && b.start) b.reminders = [owner.settings.defaultReminderMinutes];
   const created = createEvent(ownerId, b);
+  queueSync(ownerId);
   return c.json(occurrenceFor(u.id, created.id), 201);
 });
 
@@ -304,6 +334,7 @@ api.patch('/events/:id', async (c) => {
   const ownerId = editableOwner(u, c.req.param('id'));
   cleanSharing(u, ownerId, b);
   const o = updateOccurrence(ownerId, c.req.param('id'), b, scope);
+  queueSync(ownerId);
   return c.json(withReminders(u, o.id));
 });
 
@@ -311,7 +342,46 @@ api.delete('/events/:id', (c) => {
   const u = U(c);
   const ownerId = editableOwner(u, c.req.param('id'));
   deleteOccurrence(ownerId, c.req.param('id'), c.req.query('scope') === 'all' ? 'all' : 'this');
+  queueSync(ownerId);
   return c.json({ ok: true });
+});
+
+// ---------- Google Agenda ----------
+api.get('/google/status', (c) => c.json(googleStatus(U(c).id)));
+
+/** Identifiants OAuth importés par la personne (ID client + code secret, ou fichier JSON lu côté navigateur). */
+api.put('/google/credentials', async (c) => {
+  const b = await body<{ clientId: string; clientSecret: string }>(c);
+  saveCredentials(U(c).id, b.clientId, b.clientSecret);
+  return c.json(googleStatus(U(c).id));
+});
+
+api.delete('/google/credentials', async (c) => {
+  await disconnectGoogle(U(c).id);
+  clearCredentials(U(c).id);
+  return c.json(googleStatus(U(c).id));
+});
+
+/** Ouvre l'écran de consentement de Google. */
+api.get('/google/connect', (c) => c.redirect(authUrl(U(c).id)));
+
+api.post('/google/sync', async (c) => {
+  const u = U(c);
+  const r = await syncUser(u.id);
+  if (!r) throw new HTTPException(400, { message: 'Google Agenda n’est pas connecté' });
+  return c.json({ result: r, status: googleStatus(u.id) });
+});
+
+api.patch('/google/settings', async (c) => {
+  const b = await body<{ export?: boolean }>(c);
+  if (b.export !== undefined) setExport(U(c).id, Boolean(b.export));
+  queueSync(U(c).id);
+  return c.json(googleStatus(U(c).id));
+});
+
+api.post('/google/disconnect', async (c) => {
+  await disconnectGoogle(U(c).id);
+  return c.json(googleStatus(U(c).id));
 });
 
 // ---------- Partage de l'agenda ----------

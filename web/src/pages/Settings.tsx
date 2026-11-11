@@ -6,10 +6,14 @@ import { currentSubscription, disablePush, enablePush, pushSupport } from '../li
 import { useApp } from '../App';
 import { Icon, useToast } from '../components/ui';
 import { Avatar, COLORS, COLOR_LABEL } from '../lib/people';
+import { useGoogleStatus } from './GoogleGuide';
+import { useNavigate } from 'react-router-dom';
 
 export function Settings() {
   const { me, openShare } = useApp();
   const [name, setName] = useState(me.user.name);
+  const google = useGoogleStatus().data;
+  const navigate = useNavigate();
   const qc = useQueryClient();
   const toast = useToast();
   const [s, setS] = useState<any>(me.settings);
@@ -103,6 +107,28 @@ export function Settings() {
           </div>
           <button className="btn block" style={{ marginTop: 14 }} onClick={openShare}>
             <Icon.users /> Partager mon agenda
+          </button>
+        </section>
+
+        <section className="card">
+          <h2>
+            <Icon.calendar style={{ width: 18, verticalAlign: -3 }} /> Google Agenda
+          </h2>
+          <div className="row" style={{ gap: 12 }}>
+            <span className={`status-dot${google?.connected ? (google.lastError ? ' warn' : ' on') : ''}`} aria-hidden="true" />
+            <div className="grow small">
+              {google?.connected ? (
+                <>
+                  Synchronisé avec <strong>{google.email || 'Google'}</strong>
+                  {google.lastError && <span className="block error">{google.lastError}</span>}
+                </>
+              ) : (
+                <span className="muted">Relie ton Google Agenda : tes événements apparaissent ici, et ceux de PLWR dans Google.</span>
+              )}
+            </div>
+          </div>
+          <button className={`btn block${google?.connected ? '' : ' primary'}`} style={{ marginTop: 12 }} onClick={() => navigate('/reglages/google')}>
+            {google?.connected ? 'Gérer la synchronisation' : 'Connecter Google Agenda (guide pas à pas)'}
           </button>
         </section>
 

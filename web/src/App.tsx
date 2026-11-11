@@ -9,6 +9,7 @@ import { EventEditor, ScopeHost, type EditorTarget } from './components/EventEdi
 import { PendingSheet } from './components/PendingSheet';
 import { ShareSheet } from './components/ShareSheet';
 import { InvitePage } from './pages/Invite';
+import { GoogleGuide } from './pages/GoogleGuide';
 import { Today } from './pages/Today';
 import { Agenda } from './pages/Agenda';
 import { Goals, GoalDetail } from './pages/Goals';
@@ -144,9 +145,11 @@ function Shell({ me, children }: { me: Me; children: ReactNode }) {
             );
           })}
         </nav>
-        <button className="fab" aria-label="Ajouter" onClick={() => setQuick(true)}>
-          <Icon.plus />
-        </button>
+        {!loc.pathname.startsWith('/reglages') && (
+          <button className="fab" aria-label="Ajouter" onClick={() => setQuick(true)}>
+            <Icon.plus />
+          </button>
+        )}
       </div>
       {quick && <QuickAdd onClose={() => setQuick(false)} />}
       {chat && <ChatSheet onClose={() => (setChat(false), refreshAll())} />}
@@ -182,6 +185,7 @@ export function App() {
         <Route path="/objectifs/:id" element={<GoalDetail />} />
         <Route path="/budget" element={<Budget />} />
         <Route path="/reglages" element={<Settings />} />
+        <Route path="/reglages/google" element={<GoogleGuide />} />
         <Route path="*" element={<Today />} />
       </Routes>
     </Shell>

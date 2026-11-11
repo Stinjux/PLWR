@@ -53,6 +53,12 @@ export const config = {
     privateKey: clean(env.VAPID_PRIVATE_KEY),
     subject: clean(env.VAPID_SUBJECT) || 'mailto:admin@example.com',
   },
+  /** Google Agenda. Facultatif : sans ces variables, chaque personne importe ses propres identifiants dans Réglages. */
+  google: {
+    clientId: clean(env.GOOGLE_CLIENT_ID),
+    clientSecret: clean(env.GOOGLE_CLIENT_SECRET),
+    syncMinutes: Math.max(1, Number(env.GOOGLE_SYNC_MINUTES || 5)),
+  },
   schedulerIntervalMs: Number(env.SCHEDULER_INTERVAL_MS || 30000),
 };
 
