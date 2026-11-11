@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { nav, signup } from './helpers';
+import { finishOnboarding, nav, signup } from './helpers';
 
 test('agenda partagé : inviter une personne, qui voit et ajoute dans mon agenda', async ({ page, browser }) => {
   // Camille crée son compte (avec exemples) et invite Léa à modifier son agenda
@@ -25,6 +25,7 @@ test('agenda partagé : inviter une personne, qui voit et ajoute dans mon agenda
   await lea.getByLabel('Prénom').fill('Léa');
   await lea.getByLabel(/Mot de passe/).fill('motdepasse-solide');
   await lea.getByRole('button', { name: 'Créer le compte et rejoindre' }).click();
+  await finishOnboarding(lea);
   await expect(lea).toHaveURL(/\/agenda/);
   const people = lea.getByRole('group', { name: 'Personnes affichées' });
   await expect(people.getByRole('button', { name: 'Test' })).toBeVisible();

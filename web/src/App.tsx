@@ -11,6 +11,8 @@ import { ShareSheet } from './components/ShareSheet';
 import { InvitePage } from './pages/Invite';
 import { GoogleGuide } from './pages/GoogleGuide';
 import { OutlookGuide } from './pages/OutlookGuide';
+import { Onboarding } from './pages/Onboarding';
+import { InboxButton } from './components/Inbox';
 import { Today } from './pages/Today';
 import { Agenda } from './pages/Agenda';
 import { Goals, GoalDetail } from './pages/Goals';
@@ -26,6 +28,7 @@ export type Me = {
   vision: { provider: string; configured: boolean; redactCardNumbers: boolean };
   hasSamples: boolean;
   today: string;
+  onboarding: { profile: boolean; expenses: 'done' | 'skipped' | null; savings: 'done' | 'skipped' | null; completedAt: string | null; monthlySalaryCents: number | null; profileData: any };
 };
 
 type Ctx = {
@@ -134,7 +137,12 @@ function Shell({ me, children }: { me: Me; children: ReactNode }) {
             <Icon.settings /> Réglages
           </NavLink>
         </nav>
-        <main className={`main${narrow ? ' narrow' : ''}`}>{children}</main>
+        <main className={`main${narrow ? ' narrow' : ''}`}>
+          <div className="top-bar">
+            <InboxButton />
+          </div>
+          {children}
+        </main>
         <nav className="bottom-nav" aria-label="Navigation principale">
           {NAV.map(([to, label, ic]) => {
             const I = Icon[ic];
@@ -177,6 +185,7 @@ export function App() {
   if (me.isLoading) return <div className="empty">Chargement…</div>;
   if (!me.data) return <Auth invite={invite} onDone={() => (qc.invalidateQueries(), nav(invite ? '/agenda' : '/'))} />;
   if (invite) return <InvitePage token={invite} onDone={() => (qc.invalidateQueries(), nav('/agenda'))} />;
+  if (!me.data.onboarding?.completedAt) return <Onboarding me={me.data} />;
   return (
     <Shell me={me.data}>
       <Routes>
