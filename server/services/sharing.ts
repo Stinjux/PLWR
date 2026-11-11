@@ -107,8 +107,8 @@ export function decorate(o: Occurrence, viewerId: string, access: Access | null)
   const participant = o.participantIds.includes(viewerId);
   const edit = isOwner || access === 'edit';
   const redacted = !edit && !participant && (access === 'busy' || o.visibility === 'busy');
-  // Un événement importé de Google se modifie dans Google Agenda (sinon la prochaine synchro l'écraserait)
-  const base: SharedOccurrence = { ...o, canEdit: edit && o.source !== 'google', redacted, goalIds: isOwner ? o.goalIds : [] };
+  // Un événement importé (Google, Outlook) se modifie à sa source (sinon la prochaine synchro l'écraserait)
+  const base: SharedOccurrence = { ...o, canEdit: edit && o.source === 'plwr', redacted, goalIds: isOwner ? o.goalIds : [] };
   if (!redacted) return base;
   return { ...base, title: 'Occupé', location: null, notes: null, participantIds: [], reminders: [], dueReminders: [], focusDate: null };
 }

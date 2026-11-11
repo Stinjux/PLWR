@@ -311,6 +311,30 @@ CREATE TABLE IF NOT EXISTS google_exports (
   pushed_at TEXT NOT NULL
 );
 
+-- Outlook (Microsoft 365 / Outlook.com via Microsoft Graph) : même principe que Google
+CREATE TABLE IF NOT EXISTS outlook_accounts (
+  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  client_id TEXT,
+  client_secret_enc TEXT,
+  tenant TEXT,
+  email TEXT,
+  refresh_token_enc TEXT,
+  access_token_enc TEXT,
+  access_expires_at TEXT,
+  export INTEGER NOT NULL DEFAULT 1,
+  connected_at TEXT,
+  last_sync_at TEXT,
+  last_error TEXT,
+  last_result TEXT
+);
+
+CREATE TABLE IF NOT EXISTS outlook_exports (
+  event_id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  outlook_id TEXT NOT NULL,
+  pushed_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS snoozes (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -363,6 +387,8 @@ addColumn('events', 'visibility', "TEXT NOT NULL DEFAULT 'details' CHECK (visibi
 /** plwr : créé dans l'app ; google : importé de Google Agenda (lecture seule ici). */
 addColumn('events', 'source', "TEXT NOT NULL DEFAULT 'plwr'");
 addColumn('events', 'google_id', 'TEXT');
+addColumn('events', 'outlook_id', 'TEXT');
+db.exec("CREATE UNIQUE INDEX IF NOT EXISTS uq_events_outlook ON events(user_id, outlook_id) WHERE outlook_id IS NOT NULL");
 db.exec("CREATE UNIQUE INDEX IF NOT EXISTS uq_events_google ON events(user_id, google_id) WHERE google_id IS NOT NULL");
 
 export function parseJson<T>(s: string | null | undefined, fallback: T): T {

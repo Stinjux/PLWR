@@ -422,3 +422,6 @@ textarea.input { min-height: 80px; resize: vertical; }
 .dropzone svg { width: 24px; height: 24px; color: var(--muted); }
 .divider-text { display: flex; align-items: center; gap: 10px; font-size: 0.8rem; color: var(--muted); }
 .divider-text::before, .divider-text::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+.shot-table { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px 8px; font-size: 0.72rem; }
+.shot-table span { padding: 3px 4px; border-radius: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shot-table span:nth-child(-n + 4) { color: var(--muted); font-weight: 600; }

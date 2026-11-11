@@ -7,12 +7,15 @@ import { useApp } from '../App';
 import { Icon, useToast } from '../components/ui';
 import { Avatar, COLORS, COLOR_LABEL } from '../lib/people';
 import { useGoogleStatus } from './GoogleGuide';
+import { useOutlookStatus } from './OutlookGuide';
+import type { SyncStatus } from '../components/GuideParts';
 import { useNavigate } from 'react-router-dom';
 
 export function Settings() {
   const { me, openShare } = useApp();
   const [name, setName] = useState(me.user.name);
   const google = useGoogleStatus().data;
+  const outlook = useOutlookStatus().data;
   const navigate = useNavigate();
   const qc = useQueryClient();
   const toast = useToast();
@@ -110,27 +113,8 @@ export function Settings() {
           </button>
         </section>
 
-        <section className="card">
-          <h2>
-            <Icon.calendar style={{ width: 18, verticalAlign: -3 }} /> Google Agenda
-          </h2>
-          <div className="row" style={{ gap: 12 }}>
-            <span className={`status-dot${google?.connected ? (google.lastError ? ' warn' : ' on') : ''}`} aria-hidden="true" />
-            <div className="grow small">
-              {google?.connected ? (
-                <>
-                  Synchronisé avec <strong>{google.email || 'Google'}</strong>
-                  {google.lastError && <span className="block error">{google.lastError}</span>}
-                </>
-              ) : (
-                <span className="muted">Relie ton Google Agenda : tes événements apparaissent ici, et ceux de PLWR dans Google.</span>
-              )}
-            </div>
-          </div>
-          <button className={`btn block${google?.connected ? '' : ' primary'}`} style={{ marginTop: 12 }} onClick={() => navigate('/reglages/google')}>
-            {google?.connected ? 'Gérer la synchronisation' : 'Connecter Google Agenda (guide pas à pas)'}
-          </button>
-        </section>
+        <SyncCard provider="google" label="Google Agenda" status={google} pitch="Relie ton Google Agenda : tes événements apparaissent ici, et ceux de PLWR dans Google." onOpen={() => navigate('/reglages/google')} />
+        <SyncCard provider="outlook" label="Outlook" status={outlook} pitch="Relie Outlook (Outlook.com, Hotmail, Microsoft 365) : même synchronisation dans les deux sens." onOpen={() => navigate('/reglages/outlook')} />
 
         <section className="card">
           <h2>
@@ -309,5 +293,32 @@ export function Settings() {
         </section>
       </div>
     </>
+  );
+}
+
+/** Carte d'état d'une synchronisation (Google Agenda, Outlook) avec accès au guide. */
+function SyncCard({ provider, label, status, pitch, onOpen }: { provider: string; label: string; status?: SyncStatus; pitch: string; onOpen: () => void }) {
+  return (
+    <section className="card" data-testid={`card-${provider}`}>
+      <h2>
+        <Icon.calendar style={{ width: 18, verticalAlign: -3 }} /> {label}
+      </h2>
+      <div className="row" style={{ gap: 12 }}>
+        <span className={`status-dot${status?.connected ? (status.lastError ? ' warn' : ' on') : ''}`} aria-hidden="true" />
+        <div className="grow small">
+          {status?.connected ? (
+            <>
+              Synchronisé avec <strong>{status.email || label}</strong>
+              {status.lastError && <span className="block error">{status.lastError}</span>}
+            </>
+          ) : (
+            <span className="muted">{pitch}</span>
+          )}
+        </div>
+      </div>
+      <button className={`btn block${status?.connected ? '' : ' primary'}`} style={{ marginTop: 12 }} onClick={onOpen}>
+        {status?.connected ? 'Gérer la synchronisation' : `Connecter ${label} (guide pas à pas)`}
+      </button>
+    </section>
   );
 }

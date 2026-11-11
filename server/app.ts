@@ -82,6 +82,17 @@ import {
   setExport,
   syncUser,
 } from './services/google.ts';
+import {
+  clearOutlookCredentials,
+  disconnectOutlook,
+  handleOutlookCallback,
+  outlookAuthUrl,
+  outlookStatus,
+  queueOutlookSync,
+  saveOutlookCredentials,
+  setOutlookExport,
+  syncOutlook,
+} from './services/outlook.ts';
 import { formatMoney } from './time.ts';
 
 export const app = new Hono();
@@ -105,7 +116,7 @@ app.onError((err, c) => {
   if (err instanceof HTTPException) return c.json({ error: err.message }, err.status);
   if (err instanceof VisionError) return c.json({ error: err.message, manualEntry: true }, 422);
   const msg = err instanceof Error ? err.message : 'Erreur';
-  if (!/introuvable|invalide|doit|manque|choisis|déjà|positif|inconnue|refus|importe|connect|google/i.test(msg)) console.error(err);
+  if (!/introuvable|invalide|doit|manque|choisis|déjà|positif|inconnue|refus|importe|connect|google|outlook|microsoft|secret/i.test(msg)) console.error(err);
   return c.json({ error: msg }, /introuvable/i.test(msg) ? 404 : 400);
 });
 
@@ -193,6 +204,25 @@ app.get('/api/google/callback', async (c) => {
     return back('ok=1');
   } catch (e) {
     return back(`erreur=${encodeURIComponent(e instanceof Error ? e.message : 'Erreur Google')}`);
+  }
+});
+
+// ---------- Retour de l'écran de consentement Microsoft ----------
+app.get('/api/outlook/callback', async (c) => {
+  const back = (q: string) => c.redirect(`/reglages/outlook?${q}`);
+  const u = userFromRequest(c);
+  if (!u) return c.redirect('/?outlook=session');
+  const err = c.req.query('error');
+  if (err) {
+    const d = c.req.query('error_description') || '';
+    return back(`erreur=${encodeURIComponent(err === 'access_denied' ? 'Tu as refusé l’accès sur l’écran de Microsoft.' : `Microsoft : ${d.split(/\r?\n/)[0] || err}`)}`);
+  }
+  try {
+    await handleOutlookCallback(u.id, c.req.query('code') || '', c.req.query('state') || '');
+    syncOutlook(u.id).catch(() => {});
+    return back('ok=1');
+  } catch (e) {
+    return back(`erreur=${encodeURIComponent(e instanceof Error ? e.message : 'Erreur Microsoft')}`);
   }
 });
 
@@ -288,6 +318,7 @@ function editableOwner(u: User, id: string): string {
   const o = ownerId ? occurrenceFor(u.id, id) : undefined;
   if (!ownerId || !o) throw new HTTPException(404, { message: 'Élément introuvable' });
   if (o.source === 'google') throw new HTTPException(403, { message: 'Cet événement vient de Google Agenda : modifie-le dans Google Agenda, il se mettra à jour ici.' });
+  if (o.source === 'outlook') throw new HTTPException(403, { message: 'Cet événement vient d’Outlook : modifie-le dans Outlook, il se mettra à jour ici.' });
   if (!canEdit(u.id, ownerId)) throw new HTTPException(403, { message: 'Tu peux consulter cet agenda, mais pas le modifier' });
   return ownerId;
 }
@@ -312,6 +343,7 @@ api.post('/events', async (c) => {
   if (b.reminders === undefined && b.start) b.reminders = [owner.settings.defaultReminderMinutes];
   const created = createEvent(ownerId, b);
   queueSync(ownerId);
+  queueOutlookSync(ownerId);
   return c.json(occurrenceFor(u.id, created.id), 201);
 });
 
@@ -335,6 +367,7 @@ api.patch('/events/:id', async (c) => {
   cleanSharing(u, ownerId, b);
   const o = updateOccurrence(ownerId, c.req.param('id'), b, scope);
   queueSync(ownerId);
+  queueOutlookSync(ownerId);
   return c.json(withReminders(u, o.id));
 });
 
@@ -343,6 +376,7 @@ api.delete('/events/:id', (c) => {
   const ownerId = editableOwner(u, c.req.param('id'));
   deleteOccurrence(ownerId, c.req.param('id'), c.req.query('scope') === 'all' ? 'all' : 'this');
   queueSync(ownerId);
+  queueOutlookSync(ownerId);
   return c.json({ ok: true });
 });
 
@@ -382,6 +416,44 @@ api.patch('/google/settings', async (c) => {
 api.post('/google/disconnect', async (c) => {
   await disconnectGoogle(U(c).id);
   return c.json(googleStatus(U(c).id));
+});
+
+// ---------- Outlook ----------
+api.get('/outlook/status', (c) => c.json(outlookStatus(U(c).id)));
+
+/** Identifiants de l'application Microsoft Entra importés par la personne. */
+api.put('/outlook/credentials', async (c) => {
+  const b = await body<{ clientId: string; clientSecret: string; tenant?: string }>(c);
+  saveOutlookCredentials(U(c).id, b.clientId, b.clientSecret, b.tenant);
+  return c.json(outlookStatus(U(c).id));
+});
+
+api.delete('/outlook/credentials', (c) => {
+  disconnectOutlook(U(c).id);
+  clearOutlookCredentials(U(c).id);
+  return c.json(outlookStatus(U(c).id));
+});
+
+/** Ouvre l'écran de connexion et de consentement de Microsoft. */
+api.get('/outlook/connect', (c) => c.redirect(outlookAuthUrl(U(c).id)));
+
+api.post('/outlook/sync', async (c) => {
+  const u = U(c);
+  const r = await syncOutlook(u.id);
+  if (!r) throw new HTTPException(400, { message: 'Outlook n’est pas connecté' });
+  return c.json({ result: r, status: outlookStatus(u.id) });
+});
+
+api.patch('/outlook/settings', async (c) => {
+  const b = await body<{ export?: boolean }>(c);
+  if (b.export !== undefined) setOutlookExport(U(c).id, Boolean(b.export));
+  queueOutlookSync(U(c).id);
+  return c.json(outlookStatus(U(c).id));
+});
+
+api.post('/outlook/disconnect', (c) => {
+  disconnectOutlook(U(c).id);
+  return c.json(outlookStatus(U(c).id));
 });
 
 // ---------- Partage de l'agenda ----------

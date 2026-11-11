@@ -20,6 +20,7 @@ server/
   services/events.ts   agenda, récurrences, exceptions d'occurrence
   services/sharing.ts  agenda partagé : accès, invitations, « Occupé », participants
   services/google.ts   synchronisation Google Agenda (OAuth, import, envoi)
+  services/outlook.ts  synchronisation Outlook (Microsoft Graph)
   services/planner.ts  « Réorganiser ma journée »
   services/goals.ts    progression, historique semaine/mois
   services/budget.ts   enveloppes, transactions, ventilations, catégorisation, doublons
@@ -142,6 +143,21 @@ Ce qui se synchronise :
 - **Partage** : les personnes qui partagent l’agenda voient aussi les événements Google, selon leur accès.
 
 Sécurité : le code secret et les jetons sont chiffrés (AES-256-GCM, clé dérivée d’`APP_SECRET` ; si `APP_SECRET` change, il faut reconnecter). Si `GOOGLE_CLIENT_ID` et `GOOGLE_CLIENT_SECRET` sont définis sur le serveur, ils servent par défaut et le guide se réduit à l’autorisation. Un client OAuth laissé « En test » chez Google expire après 7 jours : le guide indique de publier l’application.
+
+**Synchronisation Outlook** (Outlook.com, Hotmail, Live, Microsoft 365) – même principe que Google, par Microsoft Graph, avec son **guide illustré de A à Z** (Réglages → Outlook) :
+1. ouvrir les inscriptions d’applications dans Microsoft Entra ;
+2. inscrire l’application PLWR : comptes multilocataires et personnels, plateforme Web, URI de redirection affichée par PLWR ;
+3. choisir les autorisations déléguées `Calendars.ReadWrite` et `offline_access` (la fiche de consentement) ;
+4. créer un secret client et copier la colonne **Valeur** ;
+5. **importer ses variables** dans PLWR : ID d’application, valeur du secret, annuaire (`common` par défaut) ;
+6. accepter la fiche de consentement de Microsoft ;
+7. c’est synchronisé.
+
+Comportement :
+- **Comme pour Google** : import en lecture seule, envoi optionnel avec récurrences, synchro toutes les 5 minutes (`OUTLOOK_SYNC_MINUTES`) et après chaque modification.
+- **Propre à Outlook** : les occurrences supprimées dans PLWR sont aussi supprimées dans Outlook, et un secret client expiré est signalé clairement.
+- **Identifiants communs** : `OUTLOOK_CLIENT_ID`, `OUTLOOK_CLIENT_SECRET` et `OUTLOOK_TENANT` sur le serveur réduisent le guide à l’autorisation.
+- **Deux agendas** : on peut relier Google et Outlook en même temps, et chacun reçoit ce qui est créé dans PLWR.
 
 **Objectifs** – ponctuels ou récurrents (jour, semaine, mois), à cocher, quantité, durée, montant, échéance et rappel. Un objectif peut être lié à plusieurs blocs ; en terminant un bloc on saisit le résultat réel (ex. 45 min sur 60 prévues). Progression, reste à faire, historique par semaine ou par mois.
 

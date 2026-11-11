@@ -259,7 +259,7 @@ export function toGoogleEvent(row: any, tz: string) {
 }
 
 /** Texte brut à partir de la description Google (qui peut contenir du HTML). */
-function plain(html?: string): string | null {
+export function plain(html?: string): string | null {
   if (!html) return null;
   const t = html
     .replace(/<br\s*\/?>/gi, '\n')

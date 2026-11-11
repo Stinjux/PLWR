@@ -10,6 +10,7 @@ import { PendingSheet } from './components/PendingSheet';
 import { ShareSheet } from './components/ShareSheet';
 import { InvitePage } from './pages/Invite';
 import { GoogleGuide } from './pages/GoogleGuide';
+import { OutlookGuide } from './pages/OutlookGuide';
 import { Today } from './pages/Today';
 import { Agenda } from './pages/Agenda';
 import { Goals, GoalDetail } from './pages/Goals';
@@ -186,6 +187,7 @@ export function App() {
         <Route path="/budget" element={<Budget />} />
         <Route path="/reglages" element={<Settings />} />
         <Route path="/reglages/google" element={<GoogleGuide />} />
+        <Route path="/reglages/outlook" element={<OutlookGuide />} />
         <Route path="*" element={<Today />} />
       </Routes>
     </Shell>
