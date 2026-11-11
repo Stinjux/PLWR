@@ -1,4 +1,6 @@
 import path from 'node:path';
+import fs from 'node:fs';
+import crypto from 'node:crypto';
 
 const env = process.env;
 
@@ -23,8 +25,8 @@ export const config = {
   dataDir: path.resolve(env.DATA_DIR || env.RAILWAY_VOLUME_MOUNT_PATH || './data'),
   /** URL publique de l'application (sert aux liens des notifications). */
   appUrl: (env.APP_URL || railwayUrl || 'http://localhost:3000').replace(/\/$/, ''),
-  /** Secret pour signer les jetons « Reporter » des notifications. Obligatoire en production. */
-  appSecret: env.APP_SECRET || 'dev-secret-a-remplacer',
+  /** Secret pour signer les jetons « Reporter » des notifications (APP_SECRET, sinon généré et conservé dans DATA_DIR). */
+  appSecret: '',
   cookieSecure: bool(env.COOKIE_SECURE, isProd),
   allowSignup: bool(env.ALLOW_SIGNUP, false),
   defaultTimezone: env.DEFAULT_TIMEZONE || 'America/Toronto',
@@ -53,6 +55,29 @@ export const config = {
   },
   schedulerIntervalMs: Number(env.SCHEDULER_INTERVAL_MS || 30000),
 };
+
+/**
+ * Sans APP_SECRET, on génère un secret aléatoire conservé dans le dossier de données
+ * (au lieu d'empêcher l'app de démarrer). Sans volume, il change à chaque déploiement.
+ */
+function resolveSecret(): { value: string; source: 'env' | 'file' | 'generated' } {
+  const fromEnv = (env.APP_SECRET || '').trim();
+  if (fromEnv) return { value: fromEnv, source: 'env' };
+  const file = path.join(config.dataDir, '.app-secret');
+  try {
+    const existing = fs.readFileSync(file, 'utf8').trim();
+    if (existing) return { value: existing, source: 'file' };
+  } catch {}
+  const value = crypto.randomBytes(32).toString('base64url');
+  try {
+    fs.mkdirSync(config.dataDir, { recursive: true });
+    fs.writeFileSync(file, value, { mode: 0o600 });
+  } catch {}
+  return { value, source: 'generated' };
+}
+const secret = resolveSecret();
+config.appSecret = secret.value;
+export const appSecretSource = secret.source;
 
 /** Erreur de configuration des notifications (clés VAPID invalides), affichée dans Réglages. */
 export const pushState = { error: '' as string };

@@ -1,11 +1,10 @@
 import { serve } from '@hono/node-server';
 import { app } from './app.ts';
-import { config, pushEnabled, pushState } from './config.ts';
+import { config, pushEnabled, pushState, appSecretSource } from './config.ts';
 import { startScheduler } from './services/reminders.ts';
 
-if (config.isProd && config.appSecret === 'dev-secret-a-remplacer') {
-  console.error('APP_SECRET doit être défini en production (variable d’environnement).');
-  process.exit(1);
+if (appSecretSource !== 'env' && config.isProd) {
+  console.warn('[config] APP_SECRET non défini : un secret a été généré et conservé dans le dossier de données. Définis APP_SECRET pour le fixer.');
 }
 
 serve({ fetch: app.fetch, port: config.port, hostname: config.host }, (info) => {
