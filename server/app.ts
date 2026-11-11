@@ -93,6 +93,18 @@ import {
   setOutlookExport,
   syncOutlook,
 } from './services/outlook.ts';
+import {
+  EXPENSE_PRESETS,
+  addMonthlyExpense,
+  completeOnboarding,
+  createSavingsGoal,
+  inbox,
+  markAlertsRead,
+  markStep,
+  monthlyExpenses,
+  onboardingState,
+  saveProfile,
+} from './services/onboarding.ts';
 import { formatMoney } from './time.ts';
 
 export const app = new Hono();
@@ -116,7 +128,7 @@ app.onError((err, c) => {
   if (err instanceof HTTPException) return c.json({ error: err.message }, err.status);
   if (err instanceof VisionError) return c.json({ error: err.message, manualEntry: true }, 422);
   const msg = err instanceof Error ? err.message : 'Erreur';
-  if (!/introuvable|invalide|doit|manque|choisis|déjà|positif|inconnue|refus|importe|connect|google|outlook|microsoft|secret/i.test(msg)) console.error(err);
+  if (!/introuvable|invalide|doit|manque|choisis|déjà|positif|inconnue|refus|importe|connect|google|outlook|microsoft|secret|termine|indique/i.test(msg)) console.error(err);
   return c.json({ error: msg }, /introuvable/i.test(msg) ? 404 : 400);
 });
 
@@ -253,7 +265,30 @@ api.get('/me', (c) => {
     vision: { provider: config.vision.provider, configured: config.vision.provider !== 'anthropic' || Boolean(config.vision.anthropicKey), redactCardNumbers: config.vision.redactCardNumbers },
     hasSamples: hasSamples(u.id),
     today: today(u.timezone),
+    onboarding: onboardingState(u.id),
   });
+});
+
+// ---------- Accueil (onboarding) ----------
+api.get('/onboarding', (c) => {
+  const u = U(c);
+  return c.json({ state: onboardingState(u.id), expenses: monthlyExpenses(u.id), presets: Object.entries(EXPENSE_PRESETS).map(([key, p]) => ({ key, name: p.name })) });
+});
+api.post('/onboarding/profile', async (c) => c.json(saveProfile(U(c), await body(c))));
+api.post('/onboarding/expenses', async (c) => c.json(addMonthlyExpense(U(c), await body(c)), 201));
+api.post('/onboarding/step', async (c) => {
+  const b = await body<{ step: string; state: string }>(c);
+  if (!['expenses', 'savings'].includes(b.step) || !['done', 'skipped'].includes(b.state)) throw new HTTPException(400, { message: 'Étape invalide' });
+  return c.json(markStep(U(c).id, b.step as any, b.state as any));
+});
+api.post('/onboarding/savings', async (c) => c.json(createSavingsGoal(U(c), await body(c)), 201));
+api.post('/onboarding/complete', (c) => c.json(completeOnboarding(U(c).id)));
+
+// ---------- Cloche : tâches à faire et alertes ----------
+api.get('/inbox', (c) => c.json(inbox(U(c))));
+api.post('/inbox/read', (c) => {
+  markAlertsRead(U(c).id);
+  return c.json(inbox(U(c)));
 });
 
 api.patch('/me/settings', async (c) => {

@@ -10,6 +10,8 @@ import { useGoogleStatus } from './GoogleGuide';
 import { useOutlookStatus } from './OutlookGuide';
 import type { SyncStatus } from '../components/GuideParts';
 import { useNavigate } from 'react-router-dom';
+import { ProfileForm } from './Onboarding';
+import { Sheet } from '../components/ui';
 
 export function Settings() {
   const { me, openShare } = useApp();
@@ -17,6 +19,7 @@ export function Settings() {
   const google = useGoogleStatus().data;
   const outlook = useOutlookStatus().data;
   const navigate = useNavigate();
+  const [editProfile, setEditProfile] = useState(false);
   const qc = useQueryClient();
   const toast = useToast();
   const [s, setS] = useState<any>(me.settings);
@@ -108,9 +111,19 @@ export function Settings() {
               />
             ))}
           </div>
-          <button className="btn block" style={{ marginTop: 14 }} onClick={openShare}>
-            <Icon.users /> Partager mon agenda
-          </button>
+          <div className="row wrap" style={{ marginTop: 14 }}>
+            <button className="btn grow" onClick={() => setEditProfile(true)}>
+              <Icon.edit /> Mon profil (âge, profession, salaire)
+            </button>
+            <button className="btn grow" onClick={openShare}>
+              <Icon.users /> Partager mon agenda
+            </button>
+          </div>
+          {editProfile && (
+            <Sheet title="Mon profil" onClose={() => setEditProfile(false)}>
+              <ProfileForm me={me} submitLabel="Enregistrer" onSaved={() => (qc.invalidateQueries(), setEditProfile(false), toast('Profil enregistré'))} />
+            </Sheet>
+          )}
         </section>
 
         <SyncCard provider="google" label="Google Agenda" status={google} pitch="Relie ton Google Agenda : tes événements apparaissent ici, et ceux de PLWR dans Google." onOpen={() => navigate('/reglages/google')} />

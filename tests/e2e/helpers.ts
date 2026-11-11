@@ -14,8 +14,21 @@ export async function signup(page: Page) {
   await page.getByLabel('Courriel').fill(email);
   await page.getByLabel(/Mot de passe/).fill('motdepasse-solide');
   await page.getByRole('button', { name: 'Créer le compte' }).click();
+  await finishOnboarding(page);
   await expect(page.getByText('Mes 3 priorités')).toBeVisible();
   return email;
+}
+
+/** Accueil : profil obligatoire, puis dépenses et épargne remises à plus tard. */
+export async function finishOnboarding(page: Page) {
+  await expect(page.getByRole('heading', { name: 'Faisons connaissance' })).toBeVisible();
+  await page.getByLabel('Âge').fill('34');
+  await page.getByLabel('Profession').fill('Analyste');
+  await page.getByLabel('Salaire', { exact: true }).fill('62000');
+  await page.getByRole('button', { name: 'Continuer' }).click();
+  await page.getByRole('button', { name: 'Je finirai plus tard' }).click();
+  await page.getByRole('button', { name: 'Plus tard' }).click();
+  await page.getByRole('button', { name: 'Commencer' }).click();
 }
 
 /** Capture bancaire synthétique : trois transactions d'aujourd'hui + un numéro de carte visible. */

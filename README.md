@@ -21,6 +21,7 @@ server/
   services/sharing.ts  agenda partagé : accès, invitations, « Occupé », participants
   services/google.ts   synchronisation Google Agenda (OAuth, import, envoi)
   services/outlook.ts  synchronisation Outlook (Microsoft Graph)
+  services/onboarding.ts accueil (profil, dépenses mensuelles, épargne) et cloche
   services/planner.ts  « Réorganiser ma journée »
   services/goals.ts    progression, historique semaine/mois
   services/budget.ts   enveloppes, transactions, ventilations, catégorisation, doublons
@@ -124,6 +125,17 @@ Il faut **HTTPS** (notifications, installation sur iPhone, cookies `Secure`) et 
 **Aujourd’hui** – prochain rendez-vous, 3 priorités (★ pour choisir, sinon les plus urgentes), tâches du jour, objectifs à cocher, nombre de dépenses en attente, alerte de surcharge, boutons Tâche / Événement / Dépense. « Dépense » ouvre le chatbot avec le champ prêt à écrire.
 
 **Agenda** – vues jour et semaine ; glisser la poignée ⋮⋮ pour déplacer (aussi d’un jour à l’autre en vue semaine), tirer le bas du bloc pour la durée ; événements récurrents (jour, semaine avec jours choisis, mois, date de fin) avec « cette occurrence / toute la série ». Rendez-vous fixes (bleu, plein) et tâches flexibles (vert, pointillé) avec durée estimée, échéance, priorité, plage préférée. Bouton « Se prolonge +15/+30/+45 » sur un rendez-vous, puis **Réorganiser ma journée** : proposition respectant les fixes, les pauses choisies et un battement entre blocs, aperçu avant/après, acceptation ligne par ligne, tâches qui ne rentrent pas avec un autre créneau proposé (jours suivants) ou « demain, à placer ».
+
+**Accueil (onboarding)** – après la création du compte, en trois étapes :
+1. **Profil, obligatoire** : prénom, âge, profession et salaire (par année, par mois, aux 2 semaines ou par semaine, brut ou net). Un salaire net avec une date de paie devient un revenu récurrent, ce qui alimente « Jusqu’à la prochaine paie ».
+2. **Dépenses fixes mensuelles** (facultatif) : loyer, Hydro, Internet, cellulaire, assurances, garderie… Elles deviennent des paiements récurrents du budget, avec un rappel 2 jours avant.
+3. **Objectif d’épargne** (facultatif) : un montant par mois, ou une somme d’ici une date. PLWR suggère 10 % du revenu net, ou un fonds d’urgence de 3 mois de dépenses fixes.
+
+Le profil se modifie ensuite dans Réglages.
+
+**Cloche (en haut à droite)** – une pastille compte ce qui attend :
+- **À faire** : synchroniser ses agendas, terminer ses dépenses mensuelles, choisir son objectif d’épargne, avec la progression.
+- **Alertes** : erreurs de synchronisation, paiements dus dans les 3 jours, dépenses à valider, rappels envoyés (marqués comme lus à l’ouverture).
 
 **Agenda partagé** – chacun garde son agenda et peut le partager avec d’autres comptes (Agenda → bouton personnes, ou Réglages → Partager mon agenda). Trois accès : **Peut modifier** (voit tout, ajoute et modifie), **Peut voir** (tous les détails), **Occupé seulement** (plages prises, sans titre). Inviter par courriel crée un lien à usage unique valable 14 jours, réservé à ce courriel, à envoyer soi-même (Messages, courriel… ; l’app n’envoie pas de courriel). Un **lien d’invitation** réutilisable (accès « Peut voir ») s’active ou se coupe d’un geste. Une invitation permet de créer un compte même quand les inscriptions sont fermées (`ALLOW_SIGNUP=false`). Dans l’agenda, une couleur par personne (choisie dans Réglages), des pastilles pour afficher ou masquer chacun, les avatars des participants sur les blocs. Un événement peut avoir des **participants** : ils le voient dans leur agenda et en reçoivent les rappels, même sans accès au reste. Chaque événement peut être marqué « Occupé seulement » pour les autres. Retirer une personne coupe son accès et ses participations tout de suite ; on peut aussi quitter l’agenda de quelqu’un. Les tâches à placer, objectifs, priorités et « Réorganiser » restent personnels.
 
