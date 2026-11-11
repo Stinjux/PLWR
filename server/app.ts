@@ -5,7 +5,7 @@ import { HTTPException } from 'hono/http-exception';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { DateTime } from 'luxon';
 import { all, get, run, uid, nowIso, parseJson, tx } from './db.ts';
-import { config, pushEnabled } from './config.ts';
+import { config, pushEnabled, pushState } from './config.ts';
 import {
   createSession,
   destroySession,
@@ -158,7 +158,7 @@ api.get('/me', (c) => {
   return c.json({
     user: { id: u.id, email: u.email, name: u.name, timezone: u.timezone },
     settings: u.settings,
-    push: { enabled: pushEnabled(), publicKey: config.push.publicKey || null, subscriptions: get<{ n: number }>('SELECT COUNT(*) n FROM push_subscriptions WHERE user_id = ?', u.id)!.n },
+    push: { enabled: pushEnabled(), error: pushState.error || null, publicKey: pushEnabled() ? config.push.publicKey : null, subscriptions: get<{ n: number }>('SELECT COUNT(*) n FROM push_subscriptions WHERE user_id = ?', u.id)!.n },
     vision: { provider: config.vision.provider, configured: config.vision.provider !== 'anthropic' || Boolean(config.vision.anthropicKey), redactCardNumbers: config.vision.redactCardNumbers },
     hasSamples: hasSamples(u.id),
     today: today(u.timezone),

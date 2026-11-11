@@ -2,6 +2,11 @@ import path from 'node:path';
 
 const env = process.env;
 
+/** Nettoie une valeur collée dans un tableau de bord (espaces, guillemets, retours de ligne). */
+function clean(v: string | undefined): string {
+  return (v || '').trim().replace(/^["']|["']$/g, '').replace(/\s+/g, '');
+}
+
 function bool(v: string | undefined, def: boolean): boolean {
   if (v === undefined || v === '') return def;
   return ['1', 'true', 'yes', 'oui'].includes(v.toLowerCase());
@@ -42,11 +47,13 @@ export const config = {
     maxRetentionHours: Number(env.IMAGE_MAX_RETENTION_HOURS || 72),
   },
   push: {
-    publicKey: env.VAPID_PUBLIC_KEY || '',
-    privateKey: env.VAPID_PRIVATE_KEY || '',
-    subject: env.VAPID_SUBJECT || 'mailto:admin@example.com',
+    publicKey: clean(env.VAPID_PUBLIC_KEY),
+    privateKey: clean(env.VAPID_PRIVATE_KEY),
+    subject: clean(env.VAPID_SUBJECT) || 'mailto:admin@example.com',
   },
   schedulerIntervalMs: Number(env.SCHEDULER_INTERVAL_MS || 30000),
 };
 
-export const pushEnabled = () => Boolean(config.push.publicKey && config.push.privateKey);
+/** Erreur de configuration des notifications (clés VAPID invalides), affichée dans Réglages. */
+export const pushState = { error: '' as string };
+export const pushEnabled = () => Boolean(config.push.publicKey && config.push.privateKey && !pushState.error);

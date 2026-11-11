@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import { NavLink, Route, Routes, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from './lib/api';
+import { syncPush } from './lib/push';
 import { Icon, Sheet, useToast } from './components/ui';
 import { ChatSheet } from './components/ChatSheet';
 import { EventEditor, ScopeHost, type EditorTarget } from './components/EventEditor';
@@ -17,7 +18,7 @@ import { Auth } from './pages/Auth';
 export type Me = {
   user: { id: string; email: string; name: string; timezone: string };
   settings: any;
-  push: { enabled: boolean; publicKey: string | null; subscriptions: number };
+  push: { enabled: boolean; error: string | null; publicKey: string | null; subscriptions: number };
   vision: { provider: string; configured: boolean; redactCardNumbers: boolean };
   hasSamples: boolean;
   today: string;
@@ -85,6 +86,11 @@ function Shell({ me, children }: { me: Me; children: ReactNode }) {
   const [params, setParams] = useSearchParams();
   const loc = useLocation();
   useInAppNotifications(true);
+  useEffect(() => {
+    syncPush(me.push.publicKey).then((r) => {
+      if (r !== 'none') qc.invalidateQueries({ queryKey: ['me'] });
+    });
+  }, [me.push.publicKey, qc]);
 
   useEffect(() => {
     if (params.get('chat') === '1') {

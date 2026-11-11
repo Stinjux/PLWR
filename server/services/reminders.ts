@@ -1,7 +1,7 @@
 import * as webpush from 'web-push';
 import { DateTime } from 'luxon';
 import { all, get, run, uid, nowIso } from '../db.ts';
-import { config, pushEnabled } from '../config.ts';
+import { config, pushEnabled, pushState } from '../config.ts';
 import { rowToUser, signToken, type User } from '../auth.ts';
 import { listOccurrences } from './events.ts';
 import { formatMoney, formatTime, formatDayTime } from '../time.ts';
@@ -19,7 +19,15 @@ export type Reminder = {
   deferredByQuietHours: boolean;
 };
 
-if (pushEnabled()) webpush.setVapidDetails(config.push.subject, config.push.publicKey, config.push.privateKey);
+// Une clé mal collée ne doit pas empêcher l'app de démarrer : on désactive le push et on l'explique.
+if (config.push.publicKey && config.push.privateKey) {
+  try {
+    webpush.setVapidDetails(config.push.subject, config.push.publicKey, config.push.privateKey);
+  } catch (e) {
+    pushState.error = `Clés VAPID invalides : ${(e as Error).message}. Régénère-les avec « npm run vapid » et recolle-les sans guillemets.`;
+    console.error('[push]', pushState.error);
+  }
+}
 
 /** Décale une heure d'envoi qui tombe dans les heures silencieuses à la fin de celles-ci. */
 export function applyQuietHours(fireAt: DateTime, user: User): { at: DateTime; deferred: boolean } {
@@ -104,22 +112,38 @@ export function computeReminders(user: User, fromIso: string, toIso: string): Re
   return out.sort((a, b) => (a.fireAt < b.fireAt ? -1 : 1));
 }
 
-export async function sendPush(userId: string, payload: { title: string; body: string; url: string; tag?: string; snoozeToken?: string }) {
-  if (!pushEnabled()) return { sent: 0, failed: 0, disabled: true };
+export type PushResult = { sent: number; failed: number; disabled: boolean; errors: string[] };
+
+function explainPushError(e: any): string {
+  const code = e?.statusCode;
+  if (code === 404 || code === 410) return 'abonnement expiré sur cet appareil (réactive les notifications)';
+  if (code === 403 || code === 401) return 'clés VAPID différentes de celles utilisées lors de l’abonnement (réactive les notifications sur le téléphone)';
+  if (code === 413) return 'notification trop volumineuse';
+  if (code === 429) return 'trop de notifications, service push saturé';
+  return `${code ? `erreur ${code} du service push` : 'service push injoignable'}${e?.body ? ` : ${String(e.body).slice(0, 120)}` : e?.message ? ` : ${e.message}` : ''}`;
+}
+
+export async function sendPush(userId: string, payload: { title: string; body: string; url: string; tag?: string; snoozeToken?: string }): Promise<PushResult> {
+  if (!pushEnabled()) return { sent: 0, failed: 0, disabled: true, errors: pushState.error ? [pushState.error] : [] };
   const subs = all('SELECT * FROM push_subscriptions WHERE user_id = ?', userId);
   let sent = 0, failed = 0;
+  const errors: string[] = [];
   for (const s of subs) {
     try {
-      await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, JSON.stringify(payload), { TTL: 3600, urgency: 'high' });
+      await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, JSON.stringify(payload), { TTL: 3600, urgency: 'high', timeout: 15000 });
       run('UPDATE push_subscriptions SET last_ok_at = ?, failures = 0 WHERE id = ?', nowIso(), s.id);
       sent++;
     } catch (e: any) {
       failed++;
-      if (e?.statusCode === 404 || e?.statusCode === 410) run('DELETE FROM push_subscriptions WHERE id = ?', s.id);
+      const why = explainPushError(e);
+      errors.push(why);
+      console.warn(`[push] échec vers ${new URL(s.endpoint).host} : ${why}`);
+      // Abonnement expiré ou créé avec d'autres clés : on l'oublie, l'app se réabonnera à la prochaine ouverture
+      if ([401, 403, 404, 410].includes(e?.statusCode)) run('DELETE FROM push_subscriptions WHERE id = ?', s.id);
       else run('UPDATE push_subscriptions SET failures = failures + 1 WHERE id = ?', s.id);
     }
   }
-  return { sent, failed, disabled: false };
+  return { sent, failed, disabled: false, errors };
 }
 
 /** Enregistre la notification (historique dans l'app) et l'envoie aux appareils abonnés. Dédupliqué par clé. */

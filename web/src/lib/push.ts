@@ -29,7 +29,12 @@ export async function enablePush(publicKey: string) {
   if (perm !== 'granted') throw new Error('Permission refusée. Active les notifications pour PLWR dans les réglages du téléphone.');
   const reg = (await navigator.serviceWorker.getRegistration()) || (await navigator.serviceWorker.register('/sw.js'));
   await navigator.serviceWorker.ready;
-  const sub = (await reg.pushManager.getSubscription()) || (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(publicKey) }));
+  let sub = await reg.pushManager.getSubscription();
+  if (sub && !sameKey(sub, publicKey)) {
+    await sub.unsubscribe();
+    sub = null;
+  }
+  if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(publicKey) });
   await api.post('/api/push/subscribe', sub.toJSON());
   return sub;
 }
@@ -39,5 +44,36 @@ export async function disablePush() {
   if (sub) {
     await api.post('/api/push/unsubscribe', { endpoint: sub.endpoint });
     await sub.unsubscribe();
+  }
+}
+
+const sameKey = (sub: PushSubscription, publicKey: string) => {
+  const k = sub.options?.applicationServerKey;
+  if (!k) return true;
+  const a = new Uint8Array(k as ArrayBuffer), b = urlBase64ToUint8Array(publicKey);
+  return a.length === b.length && a.every((x, i) => x === b[i]);
+};
+
+/**
+ * À chaque ouverture : renvoie l'abonnement de cet appareil au serveur (utile après un redéploiement)
+ * et se réabonne si les clés VAPID du serveur ont changé.
+ */
+export async function syncPush(publicKey: string | null): Promise<'synced' | 'resubscribed' | 'none'> {
+  try {
+    if (!publicKey || !('serviceWorker' in navigator) || !('PushManager' in window) || Notification.permission !== 'granted') return 'none';
+    const reg = await navigator.serviceWorker.getRegistration();
+    if (!reg) return 'none';
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) return 'none';
+    let state: 'synced' | 'resubscribed' = 'synced';
+    if (!sameKey(sub, publicKey)) {
+      await sub.unsubscribe();
+      sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(publicKey) });
+      state = 'resubscribed';
+    }
+    await api.post('/api/push/subscribe', sub.toJSON());
+    return state;
+  } catch {
+    return 'none';
   }
 }

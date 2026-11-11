@@ -89,10 +89,11 @@ Le dépôt contient `railway.json` (build `npm run build`, démarrage `npm start
 
 1. **New Project → Deploy from GitHub repo** → choisir ce dépôt.
 2. **Volume (obligatoire)** : clic droit sur le service → *Attach Volume* → point de montage `/data`. Railway fournit alors `RAILWAY_VOLUME_MOUNT_PATH`, que l’app utilise automatiquement pour la base SQLite et les images temporaires. Sans volume, **toutes les données sont perdues à chaque déploiement** (un avertissement s’affiche dans les journaux).
-3. **Domaine** : *Settings → Networking → Generate Domain*. L’URL HTTPS est détectée via `RAILWAY_PUBLIC_DOMAIN` (ou fixe `APP_URL` si tu utilises un domaine personnalisé).
+3. **Domaine** : *Settings → Networking → Generate Domain*, port **3000** (et ajoute `PORT=3000` dans les variables). L’URL HTTPS est détectée via `RAILWAY_PUBLIC_DOMAIN` (ou fixe `APP_URL` si tu utilises un domaine personnalisé).
 4. **Variables** : onglet *Variables → Raw Editor*, coller puis remplir :
 
 ```
+PORT=3000
 APP_SECRET=
 ANTHROPIC_API_KEY=
 VISION_PROVIDER=anthropic
@@ -105,7 +106,8 @@ DEFAULT_TIMEZONE=America/Toronto
 
    - `APP_SECRET` : `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`
    - `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` : `npm run vapid` en local, une seule fois. **Ne les change plus ensuite** : les téléphones déjà abonnés devraient se réabonner.
-   - Inutile de définir `PORT`, `DATA_DIR`, `APP_URL`, `COOKIE_SECURE` ou `NODE_ENV` : Railway fournit `PORT`, et l’app détecte Railway (cookies `Secure`, volume, domaine).
+   - Inutile de définir `DATA_DIR`, `APP_URL`, `COOKIE_SECURE` ou `NODE_ENV` : l’app détecte Railway (cookies `Secure`, volume, domaine).
+   - Colle les clés VAPID **sans guillemets ni espaces**. Une clé invalide n’empêche plus l’app de démarrer : le push est alors désactivé et Réglages affiche la raison.
 5. Déployer, ouvrir l’URL, **créer ton compte tout de suite** (le premier compte ferme les inscriptions), puis Réglages → Activer les notifications → Envoyer une notification de test.
 
 Garde **une seule instance** (`numReplicas: 1`) : SQLite et le planificateur de rappels sont prévus pour un seul processus, qui doit tourner en continu (désactive toute mise en veille de type *App Sleeping*, sinon les rappels ne partent pas). Sauvegarde : télécharger `/data/plwr.sqlite` (ou activer les sauvegardes du volume Railway).
@@ -136,6 +138,15 @@ Approche retenue : **Web Push standard** (VAPID) envoyé par le serveur + servic
 
 - **iPhone (iOS/iPadOS 16.4 ou plus récent)** : ouvrir l’app dans Safari → Partager → « Sur l’écran d’accueil ». Ouvrir PLWR **depuis l’icône**, Réglages → « Activer les notifications » → Autoriser. Puis « Envoyer une notification de test ».
 - **Android (Chrome, Edge, Firefox, Samsung Internet)** : Réglages → « Activer les notifications » → Autoriser. Installer l’app (menu ⋮ → Installer) est recommandé.
+
+### Si les notifications n’arrivent pas
+
+Réglages → « Envoyer une notification de test » affiche maintenant le résultat exact :
+- *Push désactivé sur le serveur* → variables `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` absentes ou mal collées (le message précise laquelle).
+- *Aucun appareil abonné* → touche « Activer les notifications » sur le téléphone (sur iPhone : depuis l’icône de l’écran d’accueil).
+- *Clés VAPID différentes* → les clés ont changé depuis l’abonnement ; l’app se réabonne seule à la prochaine ouverture, sinon désactive puis réactive.
+- *Envoyée à 1 appareil* mais rien ne s’affiche → réglages de notification du téléphone, mode Concentration, économiseur de batterie (Android).
+Les échecs d’envoi sont aussi écrits dans les journaux Railway (`[push] échec vers …`).
 
 ### Limites connues (à savoir avant de compter dessus)
 

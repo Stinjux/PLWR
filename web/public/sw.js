@@ -50,13 +50,18 @@ self.addEventListener('push', (event) => {
   } catch {
     data = { title: 'PLWR', body: event.data ? event.data.text() : '' };
   }
-  const supportsActions = 'maxActions' in Notification && Notification.maxActions > 0;
+  // Sur iPhone, Notification peut être absent du service worker : on ne doit jamais échouer avant showNotification,
+  // sinon iOS finit par révoquer l'abonnement.
+  let supportsActions = false;
+  try {
+    supportsActions = typeof Notification !== 'undefined' && 'maxActions' in Notification && Notification.maxActions > 0;
+  } catch {}
   const options = {
     body: data.body || '',
     icon: '/icon-192.png',
     badge: '/icon-192.png',
-    tag: data.tag,
-    renotify: true,
+    tag: data.tag || undefined,
+    renotify: Boolean(data.tag),
     data: { url: data.url || '/', snoozeToken: data.snoozeToken, supportsActions },
   };
   if (supportsActions && data.snoozeToken) {

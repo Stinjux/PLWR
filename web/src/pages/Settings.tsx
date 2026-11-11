@@ -12,6 +12,7 @@ export function Settings() {
   const toast = useToast();
   const [s, setS] = useState<any>(me.settings);
   const [subscribed, setSubscribed] = useState(false);
+  const [testResult, setTestResult] = useState<string | null>(null);
   const support = pushSupport();
   const upcoming = useQuery({ queryKey: ['reminders'], queryFn: () => api.get<any[]>('/api/reminders/upcoming?days=7') });
   const history = useQuery({ queryKey: ['notifications'], queryFn: () => api.get<any[]>('/api/notifications') });
@@ -44,8 +45,17 @@ export function Settings() {
   }
   async function test() {
     const r = await api.post('/api/push/test');
-    toast(r.disabled ? 'Notification enregistrée (push non configuré sur le serveur : visible dans l’historique)' : r.sent ? `Notification envoyée à ${r.sent} appareil(s)` : 'Aucun appareil abonné : active les notifications ci-dessus');
+    setTestResult(
+      r.disabled
+        ? `Push désactivé sur le serveur${r.errors?.[0] ? ` : ${r.errors[0]}` : ''}. La notification est seulement dans l’historique.`
+        : r.sent
+          ? `Envoyée à ${r.sent} appareil(s)${r.failed ? `, échec pour ${r.failed} : ${r.errors.join(' ; ')}` : ''}. Si rien n’apparaît, vérifie les réglages de notification du téléphone et le mode Concentration.`
+          : r.failed
+            ? `Échec : ${r.errors.join(' ; ')}`
+            : 'Aucun appareil abonné : touche « Activer les notifications » sur ce téléphone.',
+    );
     qc.invalidateQueries({ queryKey: ['notifications'] });
+    qc.invalidateQueries({ queryKey: ['me'] });
   }
   async function deleteSamples() {
     if (!confirm('Supprimer tous les exemples (tâches, objectifs, transactions et paiements d’exemple) ?')) return;
@@ -68,11 +78,18 @@ export function Settings() {
           <h2>
             <Icon.bell style={{ width: 18, verticalAlign: -3 }} /> Rappels sur ce téléphone
           </h2>
-          {!me.push.enabled && <div className="banner danger small">Le serveur n’a pas de clés VAPID : les notifications push sont désactivées (voir README). Les rappels restent visibles dans l’historique et quand l’app est ouverte.</div>}
+          {!me.push.enabled && (
+            <div className="banner danger small">
+              {me.push.error || 'Le serveur n’a pas de clés VAPID (variables VAPID_PUBLIC_KEY et VAPID_PRIVATE_KEY) : les notifications push sont désactivées.'} Les rappels restent visibles dans l’historique et quand l’app est ouverte.
+            </div>
+          )}
           {me.push.enabled && !support.supported && <div className="banner small">{support.reason}</div>}
           {me.push.enabled && support.supported && (
             <div className="row between">
-              <span className="small">{subscribed ? 'Activés sur cet appareil' : 'Désactivés sur cet appareil'}</span>
+              <span className="small">
+                {subscribed ? 'Activés sur cet appareil' : 'Désactivés sur cet appareil'}
+                {subscribed && me.push.subscriptions === 0 && <span className="tiny" style={{ color: 'var(--danger)' }}> · inconnu du serveur : désactive puis réactive</span>}
+              </span>
               <button className={`btn small${subscribed ? '' : ' primary'}`} onClick={togglePush}>
                 {subscribed ? 'Désactiver' : 'Activer les notifications'}
               </button>
@@ -82,8 +99,13 @@ export function Settings() {
             <button className="btn small" onClick={test} data-testid="test-notification">
               Envoyer une notification de test
             </button>
-            <span className="tiny muted">{me.push.subscriptions} appareil(s) abonné(s)</span>
+            <span className="tiny muted">{me.push.subscriptions} appareil(s) abonné(s) sur le serveur</span>
           </div>
+          {testResult && (
+            <div className="banner info small" style={{ marginTop: 8 }} data-testid="test-result">
+              {testResult}
+            </div>
+          )}
           <div className="form-grid" style={{ marginTop: 12 }}>
             <label className="row small full">
               <input type="checkbox" checked={s.quietHours.enabled} onChange={(e) => save({ quietHours: { ...s.quietHours, enabled: e.target.checked } })} /> Heures silencieuses (les rappels sont décalés à la fin)
