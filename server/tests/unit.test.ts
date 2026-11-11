@@ -77,6 +77,9 @@ const occ = (o: Partial<Occurrence> & { id: string; title: string; kind: 'fixed'
   goalIds: [],
   isRecurring: false,
   sample: false,
+  ownerId: 'u1',
+  visibility: 'details',
+  participantIds: [],
   ...o,
 });
 const at = (hhmm: string, date = '2026-11-11') => DateTime.fromISO(`${date}T${hhmm}`, { zone: TZ }).toUTC().toISO()!;

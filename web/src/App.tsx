@@ -7,6 +7,8 @@ import { Icon, Sheet, useToast } from './components/ui';
 import { ChatSheet } from './components/ChatSheet';
 import { EventEditor, ScopeHost, type EditorTarget } from './components/EventEditor';
 import { PendingSheet } from './components/PendingSheet';
+import { ShareSheet } from './components/ShareSheet';
+import { InvitePage } from './pages/Invite';
 import { Today } from './pages/Today';
 import { Agenda } from './pages/Agenda';
 import { Goals, GoalDetail } from './pages/Goals';
@@ -16,7 +18,7 @@ import { Snooze } from './pages/Snooze';
 import { Auth } from './pages/Auth';
 
 export type Me = {
-  user: { id: string; email: string; name: string; timezone: string };
+  user: { id: string; email: string; name: string; timezone: string; color: string };
   settings: any;
   push: { enabled: boolean; error: string | null; publicKey: string | null; subscriptions: number };
   vision: { provider: string; configured: boolean; redactCardNumbers: boolean };
@@ -29,6 +31,7 @@ type Ctx = {
   openChat: () => void;
   openEditor: (t: EditorTarget) => void;
   openPending: (importId?: string) => void;
+  openShare: () => void;
   refreshAll: () => void;
 };
 const AppCtx = createContext<Ctx>(null as any);
@@ -82,6 +85,7 @@ function Shell({ me, children }: { me: Me; children: ReactNode }) {
   const [quick, setQuick] = useState(false);
   const [editor, setEditor] = useState<EditorTarget | null>(null);
   const [pending, setPending] = useState<{ importId?: string } | null>(null);
+  const [share, setShare] = useState(false);
   const qc = useQueryClient();
   const [params, setParams] = useSearchParams();
   const loc = useLocation();
@@ -106,6 +110,7 @@ function Shell({ me, children }: { me: Me; children: ReactNode }) {
     openChat: () => setChat(true),
     openEditor: (t) => setEditor(t),
     openPending: (importId) => setPending({ importId }),
+    openShare: () => setShare(true),
     refreshAll,
   };
   const narrow = !loc.pathname.startsWith('/agenda');
@@ -147,6 +152,7 @@ function Shell({ me, children }: { me: Me; children: ReactNode }) {
       {chat && <ChatSheet onClose={() => (setChat(false), refreshAll())} />}
       {editor && <EventEditor target={editor} onClose={() => (setEditor(null), refreshAll())} />}
       <ScopeHost />
+      {share && <ShareSheet onClose={() => setShare(false)} />}
       {pending && <PendingSheet importId={pending.importId} onClose={() => (setPending(null), refreshAll())} />}
     </AppCtx.Provider>
   );
@@ -163,8 +169,10 @@ export function App() {
   }, [qc]);
   const loc = useLocation();
   if (loc.pathname === '/rappel') return <Snooze />;
+  const invite = loc.pathname.startsWith('/invitation/') ? decodeURIComponent(loc.pathname.slice('/invitation/'.length)) : null;
   if (me.isLoading) return <div className="empty">Chargement…</div>;
-  if (!me.data) return <Auth onDone={() => (qc.invalidateQueries({ queryKey: ['me'] }), nav('/'))} />;
+  if (!me.data) return <Auth invite={invite} onDone={() => (qc.invalidateQueries(), nav(invite ? '/agenda' : '/'))} />;
+  if (invite) return <InvitePage token={invite} onDone={() => (qc.invalidateQueries(), nav('/agenda'))} />;
   return (
     <Shell me={me.data}>
       <Routes>

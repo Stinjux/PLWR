@@ -5,9 +5,11 @@ import { dayLabel, dt, time } from '../lib/format';
 import { currentSubscription, disablePush, enablePush, pushSupport } from '../lib/push';
 import { useApp } from '../App';
 import { Icon, useToast } from '../components/ui';
+import { Avatar, COLORS, COLOR_LABEL } from '../lib/people';
 
 export function Settings() {
-  const { me } = useApp();
+  const { me, openShare } = useApp();
+  const [name, setName] = useState(me.user.name);
   const qc = useQueryClient();
   const toast = useToast();
   const [s, setS] = useState<any>(me.settings);
@@ -74,6 +76,36 @@ export function Settings() {
         <h1>Réglages</h1>
       </div>
       <div className="stack">
+        <section className="card">
+          <h2>
+            <Icon.users style={{ width: 18, verticalAlign: -3 }} /> Profil et partage
+          </h2>
+          <div className="row" style={{ gap: 12, marginBottom: 12 }}>
+            <Avatar person={{ initial: (name || me.user.email).charAt(0).toUpperCase(), color: me.user.color, name: name || 'Moi' }} size={44} />
+            <label className="field grow">
+              Prénom affiché aux autres
+              <input className="input" value={name} onChange={(e) => setName(e.target.value)} onBlur={() => name !== me.user.name && save({ name }).then(() => toast('Prénom enregistré'))} />
+            </label>
+          </div>
+          <div className="small muted" style={{ fontWeight: 600, marginBottom: 6 }}>Ma couleur dans l’agenda</div>
+          <div className="row wrap" role="radiogroup" aria-label="Ma couleur dans l’agenda" style={{ gap: 10 }}>
+            {COLORS.map((c) => (
+              <button
+                key={c}
+                type="button"
+                role="radio"
+                aria-checked={me.user.color === c}
+                aria-label={COLOR_LABEL[c]}
+                className={`swatch pc-${c}${me.user.color === c ? ' on' : ''}`}
+                onClick={() => save({ color: c }).then(() => qc.invalidateQueries({ queryKey: ['people'] }))}
+              />
+            ))}
+          </div>
+          <button className="btn block" style={{ marginTop: 14 }} onClick={openShare}>
+            <Icon.users /> Partager mon agenda
+          </button>
+        </section>
+
         <section className="card">
           <h2>
             <Icon.bell style={{ width: 18, verticalAlign: -3 }} /> Rappels sur ce téléphone

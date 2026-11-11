@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="fr-CA">
+<head>
+<meta charset="utf-8">
+<title>Agenda — jour</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:inherit;text-decoration:none}a:hover{color:inherit}
+button{font:inherit;color:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="width: 402px; height: 874px; position: relative; overflow: hidden; background: #F7F7F5; color: #1C1C1E; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', Inter, system-ui, sans-serif; -webkit-font-smoothing: antialiased">
+
+  <header style="padding: 62px 20px 0 20px; display: flex; align-items: flex-end; justify-content: space-between">
+    <div>
+      <p style="margin: 0; font-size: 13px; font-weight: 600; color: #6E6E73; letter-spacing: 0.01em">{{dayLabel}}</p>
+      <h1 style="margin: 2px 0 0 0; font-size: 34px; font-weight: 700; letter-spacing: -0.022em; line-height: 1.1">Agenda</h1>
+    </div>
+    <div style="display: flex; gap: 10px">
+      <a href="Share.dc.html" aria-label="Partager l’agenda" style="width: 44px; height: 44px; border-radius: 22px; background: #FFFFFF; box-shadow: 0 0 0 1px rgba(0,0,0,0.06); display: flex; align-items: center; justify-content: center">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1C1C1E" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.2"></circle><path d="M3.5 19c.6-3 2.8-4.6 5.5-4.6s4.9 1.6 5.5 4.6"></path><path d="M16 5.2a3 3 0 0 1 0 5.6"></path><path d="M17.5 14.6c1.6.6 2.7 2 3 4.4"></path></svg>
+      </a>
+      <button aria-label="Nouvel événement" style="width: 44px; height: 44px; border-radius: 22px; border: 0; background: #1C1C1E; display: flex; align-items: center; justify-content: center">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
+      </button>
+    </div>
+  </header>
+
+  <nav aria-label="Semaine" style="margin: 20px 12px 0 12px; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 0">
+    <sc-for list="{{week}}" as="d" hint-placeholder-count="7">
+      <button onClick="{{d.pick}}" aria-label="{{d.aria}}" style="border: 0; background: transparent; padding: 4px 0; min-height: 56px; display: flex; flex-direction: column; align-items: center; gap: 6px">
+        <span style="font-size: 11px; font-weight: 600; color: #6E6E73; letter-spacing: 0.04em">{{d.letter}}</span>
+        <span style="{{d.numStyle}}">{{d.num}}</span>
+      </button>
+    </sc-for>
+  </nav>
+
+  <div role="group" aria-label="Personnes affichées" style="margin-top: 14px; padding: 0 20px; display: flex; gap: 8px; overflow-x: auto">
+    <sc-for list="{{people}}" as="p" hint-placeholder-count="4">
+      <button onClick="{{p.toggle}}" aria-pressed="{{p.on}}" style="{{p.chipStyle}}">
+        <span style="{{p.dotStyle}}">{{p.ini}}</span>
+        <span>{{p.name}}</span>
+      </button>
+    </sc-for>
+    <a href="Share.dc.html" style="flex: none; height: 36px; padding: 0 14px; border-radius: 18px; border: 1px dashed #C7C7CC; display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 500; color: #3A3A3C">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
+      Inviter
+    </a>
+  </div>
+
+  <div style="position: absolute; top: 306px; left: 0; right: 0; bottom: 0; overflow-y: auto">
+    <div style="position: relative; height: 640px">
+      <sc-for list="{{hours}}" as="h" hint-placeholder-count="11">
+        <div style="{{h.rowStyle}}">
+          <span style="width: 44px; flex: none; font-size: 11px; font-weight: 500; color: #6E6E73; transform: translateY(-7px)">{{h.label}}</span>
+          <span style="flex: 1; height: 1px; background: #E8E8EA"></span>
+        </div>
+      </sc-for>
+
+      <div style="position: absolute; top: 132px; left: 56px; right: 20px; display: flex; align-items: center" aria-label="Maintenant, 10 h 45">
+        <span style="width: 8px; height: 8px; border-radius: 4px; background: #D93A3F"></span>
+        <span style="flex: 1; height: 1.5px; background: #D93A3F"></span>
+      </div>
+
+      <sc-for list="{{events}}" as="e" hint-placeholder-count="6">
+        <a href="Event.dc.html" style="{{e.cardStyle}}">
+          <div style="min-width: 0; display: flex; flex-direction: column; gap: 2px">
+            <span style="font-size: 15px; font-weight: 600; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{e.title}}</span>
+            <span style="font-size: 13px; color: #48484A; white-space: nowrap">{{e.sub}}</span>
+          </div>
+          <span style="display: flex; flex: none; padding-left: 8px">
+            <sc-for list="{{e.avatars}}" as="a" hint-placeholder-count="1">
+              <span style="{{a.style}}">{{a.ini}}</span>
+            </sc-for>
+          </span>
+        </a>
+      </sc-for>
+    </div>
+  </div>
+
+  <nav aria-label="Navigation principale" style="position: absolute; left: 0; right: 0; bottom: 0; height: 84px; box-sizing: border-box; padding: 8px 8px 30px 8px; background: rgba(247,247,245,0.88); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-top: 1px solid rgba(0,0,0,0.06); display: grid; grid-template-columns: repeat(5, minmax(0, 1fr))">
+    <a href="#" style="display: flex; flex-direction: column; align-items: center; gap: 3px; color: #6E6E73; font-size: 10px; font-weight: 500">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"></path></svg>
+      Aujourd’hui
+    </a>
+    <a href="#" aria-current="page" style="display: flex; flex-direction: column; align-items: center; gap: 3px; color: #1C1C1E; font-size: 10px; font-weight: 600">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="3.5"></rect><path d="M3.5 10h17M8 3v4M16 3v4"></path></svg>
+      Agenda
+    </a>
+    <a href="#" style="display: flex; flex-direction: column; align-items: center; gap: 3px; color: #6E6E73; font-size: 10px; font-weight: 500">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><circle cx="12" cy="12" r="4.5"></circle><circle cx="12" cy="12" r="0.8" fill="currentColor"></circle></svg>
+      Objectifs
+    </a>
+    <a href="#" style="display: flex; flex-direction: column; align-items: center; gap: 3px; color: #6E6E73; font-size: 10px; font-weight: 500">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="6" width="17" height="13" rx="3"></rect><path d="M3.5 10h17"></path><path d="M15.5 14.5h2"></path></svg>
+      Budget
+    </a>
+    <a href="#" style="display: flex; flex-direction: column; align-items: center; gap: 3px; color: #6E6E73; font-size: 10px; font-weight: 500">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"></path><circle cx="16" cy="7" r="2"></circle><circle cx="10" cy="17" r="2"></circle></svg>
+      Réglages
+    </a>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":402,"height":874}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { day: 3, hidden: {} };
+  }
+  fmt(m) {
+    var h = Math.floor(m / 60), mm = m % 60;
+    return h + ' h' + (mm ? ' ' + (mm < 10 ? '0' + mm : mm) : '');
+  }
+  renderVals() {
+    var self = this;
+    var PEOPLE = [
+      { id: 'moi', name: 'Moi', ini: 'M', c: '#2563EB', t: '#EAF0FD' },
+      { id: 'camille', name: 'Camille', ini: 'C', c: '#2F7A5F', t: '#E7F2EC' },
+      { id: 'lea', name: 'Léa', ini: 'L', c: '#A65A12', t: '#FBEFE2' },
+      { id: 'thomas', name: 'Thomas', ini: 'T', c: '#7A4FB8', t: '#F0EAF8' }
+    ];
+    var byId = {};
+    PEOPLE.forEach(function (p) { byId[p.id] = p; });
+    var hidden = this.state.hidden;
+
+    var DAYS = [
+      { l: 'L', n: 9, full: 'Lundi 9 novembre' },
+      { l: 'M', n: 10, full: 'Mardi 10 novembre' },
+      { l: 'M', n: 11, full: 'Mercredi 11 novembre' },
+      { l: 'J', n: 12, full: 'Jeudi 12 novembre' },
+      { l: 'V', n: 13, full: 'Vendredi 13 novembre' },
+      { l: 'S', n: 14, full: 'Samedi 14 novembre' },
+      { l: 'D', n: 15, full: 'Dimanche 15 novembre' }
+    ];
+    var week = DAYS.map(function (d, i) {
+      var sel = i === self.state.day;
+      return {
+        letter: d.l, num: d.n, aria: d.full,
+        numStyle: 'width: 34px; height: 34px; border-radius: 17px; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: ' + (sel ? '600' : '500') + '; ' + (sel ? 'background: #1C1C1E; color: #FFFFFF' : 'color: #1C1C1E'),
+        pick: function () { self.setState({ day: i }); }
+      };
+    });
+
+    var people = PEOPLE.map(function (p) {
+      var on = !hidden[p.id];
+      return {
+        name: p.name, ini: p.ini, on: on ? 'true' : 'false',
+        chipStyle: 'flex: none; height: 36px; padding: 0 14px 0 4px; border-radius: 18px; display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 500; border: 0; ' + (on ? 'background: #FFFFFF; box-shadow: 0 0 0 1px rgba(0,0,0,0.07); color: #1C1C1E' : 'background: transparent; box-shadow: 0 0 0 1px #E5E5EA; color: #6E6E73'),
+        dotStyle: 'width: 28px; height: 28px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; color: #FFFFFF; background: ' + (on ? p.c : '#AEAEB2'),
+        toggle: function () {
+          var h = Object.assign({}, self.state.hidden);
+          h[p.id] = !h[p.id];
+          self.setState({ hidden: h });
+        }
+      };
+    });
+
+    var START = 8 * 60, PX = 0.8;
+    var hours = [];
+    for (var h = 8; h <= 19; h++) {
+      hours.push({ label: h + ' h', rowStyle: 'position: absolute; left: 12px; right: 20px; top: ' + ((h * 60 - START) * PX + 8) + 'px; display: flex; align-items: flex-start' });
+    }
+
+    var EVENTS = [
+      { title: 'Course matinale', s: 8 * 60 + 30, e: 9 * 60 + 15, who: ['moi'] },
+      { title: 'Réunion d’équipe', s: 9 * 60 + 30, e: 10 * 60 + 30, who: ['camille', 'moi'], place: 'Salle Érable' },
+      { title: 'Dîner avec Léa', s: 12 * 60, e: 13 * 60, who: ['lea', 'moi'], place: 'Café du parc' },
+      { title: 'Dentiste', s: 14 * 60, e: 15 * 60 + 15, who: ['thomas'], place: 'Clinique Saint-Denis' },
+      { title: 'Révision du budget', s: 16 * 60, e: 17 * 60, who: ['moi', 'camille'] },
+      { title: 'Cours de piano', s: 17 * 60 + 30, e: 18 * 60 + 30, who: ['lea'] }
+    ];
+    var events = EVENTS.filter(function (ev) {
+      return ev.who.some(function (id) { return !hidden[id]; });
+    }).map(function (ev) {
+      var owner = byId[ev.who[0]];
+      var top = (ev.s - START) * PX + 10;
+      var height = (ev.e - ev.s) * PX - 4;
+      var time = self.fmt(ev.s) + ' – ' + self.fmt(ev.e);
+      return {
+        title: ev.title,
+        sub: ev.place ? time + ' · ' + ev.place : time,
+        cardStyle: 'position: absolute; left: 56px; right: 20px; top: ' + top + 'px; height: ' + height + 'px; box-sizing: border-box; padding: 0 12px 0 14px; border-radius: 14px; background: ' + owner.t + '; display: flex; align-items: center; justify-content: space-between; overflow: hidden',
+        avatars: ev.who.map(function (id, i) {
+          var p = byId[id];
+          return { ini: p.ini, style: 'width: 24px; height: 24px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; color: #FFFFFF; background: ' + p.c + '; box-shadow: 0 0 0 2px ' + owner.t + '; margin-left: ' + (i ? '-6px' : '0') };
+        })
+      };
+    });
+
+    return { dayLabel: DAYS[this.state.day].full, week: week, people: people, hours: hours, events: events };
+  }
+}
+</script>
+</body>
+</html>

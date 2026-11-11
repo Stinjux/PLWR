@@ -51,6 +51,26 @@ import { processImport, serializeImport } from './services/imports.ts';
 import { computeReminders, deliver, snooze } from './services/reminders.ts';
 import { createDefaults, createSamples, deleteSamples, hasSamples } from './services/seed.ts';
 import { VisionError } from './vision/types.ts';
+import {
+  COLORS,
+  acceptInvite,
+  allowedParticipants,
+  canEdit,
+  colorOf,
+  createInvite,
+  describeInvite,
+  isRole,
+  nextColor,
+  occurrenceFor,
+  ownerOf,
+  people,
+  removeMember,
+  revokeInvite,
+  setMemberRole,
+  setShareLink,
+  sharingState,
+  visibleOccurrences,
+} from './services/sharing.ts';
 import { formatMoney } from './time.ts';
 
 export const app = new Hono();
@@ -95,12 +115,16 @@ app.get('/api/auth/status', (c) => {
 app.post('/api/auth/register', async (c) => {
   if (c.req.header('x-plwr') !== '1') throw new HTTPException(403, { message: 'Requête refusée' });
   const hasUsers = Boolean(get('SELECT 1 FROM users LIMIT 1'));
-  if (hasUsers && !config.allowSignup) throw new HTTPException(403, { message: 'Les inscriptions sont fermées' });
-  const b = await body<{ email: string; password: string; name?: string; samples?: boolean }>(c);
+  const b = await body<{ email: string; password: string; name?: string; samples?: boolean; invite?: string }>(c);
+  // Une invitation valide permet de créer un compte même quand les inscriptions sont fermées
+  const invite = b.invite ? describeInvite(b.invite) : null;
+  if (b.invite && !invite) throw new HTTPException(400, { message: 'Invitation invalide ou expirée' });
+  if (hasUsers && !config.allowSignup && !invite) throw new HTTPException(403, { message: 'Les inscriptions sont fermées' });
   const email = String(b.email || '').trim().toLowerCase();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new HTTPException(400, { message: 'Courriel invalide' });
   if (String(b.password || '').length < 10) throw new HTTPException(400, { message: 'Le mot de passe doit contenir au moins 10 caractères' });
   if (get('SELECT 1 FROM users WHERE email = ?', email)) throw new HTTPException(400, { message: 'Ce courriel est déjà utilisé' });
+  if (invite?.email && invite.email !== email) throw new HTTPException(400, { message: `Cette invitation est destinée à ${invite.email}` });
   const id = uid();
   run(
     'INSERT INTO users (id, email, name, password_hash, timezone, settings, created_at) VALUES (?,?,?,?,?,?,?)',
@@ -109,10 +133,11 @@ app.post('/api/auth/register', async (c) => {
     String(b.name || '').trim().slice(0, 80),
     hashPassword(b.password),
     config.defaultTimezone,
-    JSON.stringify(DEFAULT_SETTINGS),
+    JSON.stringify({ ...DEFAULT_SETTINGS, color: nextColor() }),
     nowIso(),
   );
   createDefaults(id);
+  if (b.invite) acceptInvite(b.invite, id);
   if (b.samples !== false) createSamples(loadUser(id)!);
   createSession(c, id);
   return c.json({ ok: true });
@@ -133,6 +158,15 @@ app.post('/api/auth/login', async (c) => {
 app.post('/api/auth/logout', (c) => {
   destroySession(c);
   return c.json({ ok: true });
+});
+
+// ---------- Invitation à un agenda (lecture publique : nom du propriétaire et rôle seulement) ----------
+app.get('/api/invites/:token', (c) => {
+  const ip = c.req.header('x-forwarded-for')?.split(',')[0] || 'local';
+  if (!rateLimit(`invite:${ip}`, 60)) throw new HTTPException(429, { message: 'Trop de tentatives, réessaie plus tard' });
+  const d = describeInvite(c.req.param('token'));
+  if (!d) throw new HTTPException(404, { message: 'Invitation invalide ou expirée' });
+  return c.json(d);
 });
 
 // ---------- Action « Reporter » d'une notification (jeton signé, sans cookie) ----------
@@ -156,7 +190,7 @@ const U = (c: any): User => c.get('user');
 api.get('/me', (c) => {
   const u = U(c);
   return c.json({
-    user: { id: u.id, email: u.email, name: u.name, timezone: u.timezone },
+    user: { id: u.id, email: u.email, name: u.name, timezone: u.timezone, color: colorOf({ id: u.id, settings: JSON.stringify(u.settings) }) },
     settings: u.settings,
     push: { enabled: pushEnabled(), error: pushState.error || null, publicKey: pushEnabled() ? config.push.publicKey : null, subscriptions: get<{ n: number }>('SELECT COUNT(*) n FROM push_subscriptions WHERE user_id = ?', u.id)!.n },
     vision: { provider: config.vision.provider, configured: config.vision.provider !== 'anthropic' || Boolean(config.vision.anthropicKey), redactCardNumbers: config.vision.redactCardNumbers },
@@ -178,6 +212,8 @@ api.patch('/me/settings', async (c) => {
   if (b.defaultReminderMinutes !== undefined) s.defaultReminderMinutes = Math.max(0, Number(b.defaultReminderMinutes) || 0);
   if (b.snoozeMinutes !== undefined) s.snoozeMinutes = Math.max(5, Number(b.snoozeMinutes) || 10);
   if (b.keepImages !== undefined) s.keepImages = Boolean(b.keepImages);
+  if (b.color !== undefined && (COLORS as readonly string[]).includes(b.color)) (s as any).color = b.color;
+  if (typeof b.name === 'string') run('UPDATE users SET name = ? WHERE id = ?', b.name.trim().slice(0, 80), u.id);
   if (b.simulateVisionError !== undefined) (s as any).simulateVisionError = Boolean(b.simulateVisionError);
   run('UPDATE users SET settings = ? WHERE id = ?', JSON.stringify(s), u.id);
   return c.json({ settings: s });
@@ -214,21 +250,45 @@ api.get('/events', (c) => {
   const u = U(c);
   const from = c.req.query('from'), to = c.req.query('to');
   if (!from || !to) throw new HTTPException(400, { message: 'Paramètres from/to requis' });
-  const occurrences = listOccurrences(u.id, u.timezone, toUtcIso(from), toUtcIso(to));
-  const unscheduled = listUnscheduled(u.id);
-  return c.json({ occurrences, unscheduled });
+  const occurrences = visibleOccurrences(u, toUtcIso(from), toUtcIso(to));
+  const unscheduled = listUnscheduled(u.id).map((o) => ({ ...o, canEdit: true, redacted: false }));
+  return c.json({ occurrences, unscheduled, people: people(u.id) });
 });
+
+/** Propriétaire de l'élément, en vérifiant que u peut le modifier. */
+function editableOwner(u: User, id: string): string {
+  const ownerId = ownerOf(id);
+  if (!ownerId || !occurrenceFor(u.id, id)) throw new HTTPException(404, { message: 'Élément introuvable' });
+  if (!canEdit(u.id, ownerId)) throw new HTTPException(403, { message: 'Tu peux consulter cet agenda, mais pas le modifier' });
+  return ownerId;
+}
+
+function cleanSharing(u: User, ownerId: string, b: EventInput & { ownerId?: string }) {
+  delete b.ownerId;
+  b.participantIds = allowedParticipants(u.id, ownerId, b.participantIds);
+  if (b.visibility !== undefined && b.visibility !== 'busy') b.visibility = 'details';
+  // Les objectifs appartiennent au propriétaire de l'agenda : on ne les touche pas depuis l'agenda d'un autre
+  if (ownerId !== u.id) delete b.goalIds;
+}
+
+api.get('/people', (c) => c.json(people(U(c).id)));
 
 api.post('/events', async (c) => {
   const u = U(c);
-  const b = await body<EventInput>(c);
-  if (b.reminders === undefined && b.start) b.reminders = [u.settings.defaultReminderMinutes];
-  return c.json(createEvent(u.id, b), 201);
+  const b = await body<EventInput & { ownerId?: string }>(c);
+  const ownerId = b.ownerId ? String(b.ownerId) : u.id;
+  if (!canEdit(u.id, ownerId)) throw new HTTPException(403, { message: 'Tu ne peux pas ajouter dans cet agenda' });
+  cleanSharing(u, ownerId, b);
+  const owner = ownerId === u.id ? u : loadUser(ownerId)!;
+  if (b.reminders === undefined && b.start) b.reminders = [owner.settings.defaultReminderMinutes];
+  const created = createEvent(ownerId, b);
+  return c.json(occurrenceFor(u.id, created.id), 201);
 });
 
 function withReminders(u: User, occId: string) {
-  const o = getOccurrence(u.id, occId);
+  const o = occurrenceFor(u.id, occId);
   if (!o) throw new HTTPException(404, { message: 'Élément introuvable' });
+  if (o.ownerId !== u.id && !o.participantIds.includes(u.id)) return { ...o, nextReminders: [] };
   const now = new Date().toISOString();
   const horizon = DateTime.now().plus({ days: 60 }).toUTC().toISO()!;
   const reminders = computeReminders(u, now, horizon).filter((r) => r.refId === o.id || r.refId === o.eventId);
@@ -241,13 +301,60 @@ api.patch('/events/:id', async (c) => {
   const u = U(c);
   const b = await body<EventInput>(c);
   const scope = c.req.query('scope') === 'all' ? 'all' : 'this';
-  const o = updateOccurrence(u.id, c.req.param('id'), b, scope);
+  const ownerId = editableOwner(u, c.req.param('id'));
+  cleanSharing(u, ownerId, b);
+  const o = updateOccurrence(ownerId, c.req.param('id'), b, scope);
   return c.json(withReminders(u, o.id));
 });
 
 api.delete('/events/:id', (c) => {
-  deleteOccurrence(U(c).id, c.req.param('id'), c.req.query('scope') === 'all' ? 'all' : 'this');
+  const u = U(c);
+  const ownerId = editableOwner(u, c.req.param('id'));
+  deleteOccurrence(ownerId, c.req.param('id'), c.req.query('scope') === 'all' ? 'all' : 'this');
   return c.json({ ok: true });
+});
+
+// ---------- Partage de l'agenda ----------
+api.get('/sharing', (c) => c.json(sharingState(U(c).id)));
+
+api.post('/sharing/invites', async (c) => {
+  const u = U(c);
+  const b = await body<{ email: string; role?: string }>(c);
+  return c.json(createInvite(u.id, String(b.email || ''), isRole(b.role) ? b.role : 'view'), 201);
+});
+
+api.delete('/sharing/invites/:id', (c) => {
+  revokeInvite(U(c).id, c.req.param('id'));
+  return c.json({ ok: true });
+});
+
+api.post('/sharing/link', async (c) => {
+  const b = await body<{ enabled: boolean }>(c);
+  return c.json({ link: setShareLink(U(c).id, Boolean(b.enabled)) });
+});
+
+api.patch('/sharing/members/:id', async (c) => {
+  const b = await body<{ role: string }>(c);
+  if (!isRole(b.role)) throw new HTTPException(400, { message: 'Rôle invalide' });
+  setMemberRole(U(c).id, c.req.param('id'), b.role);
+  return c.json(sharingState(U(c).id));
+});
+
+/** Retirer quelqu'un de mon agenda. */
+api.delete('/sharing/members/:id', (c) => {
+  removeMember(U(c).id, c.req.param('id'));
+  return c.json(sharingState(U(c).id));
+});
+
+/** Quitter l'agenda de quelqu'un d'autre. */
+api.delete('/sharing/shared/:ownerId', (c) => {
+  removeMember(c.req.param('ownerId'), U(c).id);
+  return c.json(sharingState(U(c).id));
+});
+
+api.post('/invites/:token/accept', (c) => {
+  const u = U(c);
+  return c.json(acceptInvite(c.req.param('token'), u.id));
 });
 
 api.post('/events/:id/focus', async (c) => {

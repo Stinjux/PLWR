@@ -5,7 +5,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { DateTime } from 'luxon';
 import { api } from '../lib/api';
-import { TZ, dt, dayLabel, duration, time, todayIso } from '../lib/format';
+import { TZ, dt, dayLabel, duration, longDate, time, todayIso } from '../lib/format';
+import { Avatar, AvatarStack, useHiddenPeople, type Person } from '../lib/people';
 import { useApp } from '../App';
 import { Icon, Seg, useToast } from '../components/ui';
 import { askScope, type Occ } from '../components/EventEditor';
@@ -43,7 +44,8 @@ function layoutColumn(items: Occ[]) {
 }
 
 export function Agenda() {
-  const { me, openEditor } = useApp();
+  const { me, openEditor, openShare } = useApp();
+  const { hidden, toggle: togglePerson } = useHiddenPeople();
   const toast = useToast();
   const qc = useQueryClient();
   const [params] = useSearchParams();
@@ -65,14 +67,18 @@ export function Agenda() {
   }, [date, view]);
   const from = DateTime.fromISO(days[0], { zone: TZ }).toUTC().toISO()!;
   const to = DateTime.fromISO(days[days.length - 1], { zone: TZ }).plus({ days: 1 }).toUTC().toISO()!;
-  const q = useQuery({ queryKey: ['events', from, to], queryFn: () => api.get<{ occurrences: Occ[]; unscheduled: Occ[] }>(`/api/events?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`) });
+  const q = useQuery({ queryKey: ['events', from, to], queryFn: () => api.get<{ occurrences: Occ[]; unscheduled: Occ[]; people: Person[] }>(`/api/events?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`) });
 
   useEffect(() => {
     const [h, m] = (me.settings.dayStart || '07:00').split(':').map(Number);
     if (wrapRef.current) wrapRef.current.scrollTop = (h * 60 + m) * PX - 16;
   }, [view, me.settings.dayStart]);
 
-  const occs = (q.data?.occurrences || []).filter((o) => o.start && o.end);
+  const people = q.data?.people || [];
+  const byId = new Map(people.map((p) => [p.id, p]));
+  // Un élément reste affiché tant qu'au moins une de ses personnes (propriétaire ou participant) est affichée
+  const shown = (o: Occ) => [o.ownerId, ...(o.participantIds || [])].some((id) => !hidden.includes(id));
+  const occs = (q.data?.occurrences || []).filter((o) => o.start && o.end && shown(o));
   const byDay = new Map<string, Occ[]>(days.map((d) => [d, []]));
   for (const o of occs) {
     const p = preview && preview.id === o.id ? { ...o, start: preview.start, end: preview.end } : o;
@@ -93,7 +99,7 @@ export function Agenda() {
    * un geste rapide fait défiler l'agenda. Le bas du bloc modifie la durée.
    */
   function startDrag(e: React.PointerEvent, o: Occ) {
-    if (e.button > 0 || o.status === 'cancelled') return;
+    if (e.button > 0 || o.status === 'cancelled' || o.canEdit === false) return;
     e.stopPropagation(); // pas de sélection de plage sous un bloc
     const mode: 'move' | 'resize' = (e.target as HTMLElement).closest('.resize') ? 'resize' : 'move';
     const touch = e.pointerType !== 'mouse';
@@ -287,20 +293,17 @@ export function Agenda() {
 
   return (
     <>
-      <div className="page-head">
-        <h1>Agenda</h1>
-        <Seg
-          label="Vue"
-          value={view}
-          options={[
-            ['day', 'Jour'],
-            ['week', 'Semaine'],
-          ]}
-          onChange={setView}
-        />
+      <div className="agenda-head">
+        <div className="grow" style={{ minWidth: 0 }}>
+          <div className="eyebrow">{view === 'day' ? longDate(date) : `Semaine du ${DateTime.fromISO(days[0]).toFormat('d LLLL')}`}</div>
+          <h1>Agenda</h1>
+        </div>
+        <button className="round-btn" onClick={openShare} aria-label="Partager l’agenda">
+          <Icon.users />
+        </button>
       </div>
       <div className="agenda-toolbar">
-        <div className="row grow" style={{ gap: 2 }}>
+        <div className="row grow" style={{ gap: 2, minWidth: 0 }}>
           <button className="icon-btn" onClick={() => shift(-1)} aria-label="Précédent">
             <Icon.chevronL />
           </button>
@@ -316,14 +319,47 @@ export function Agenda() {
             </button>
           )}
         </div>
+        <Seg
+          label="Vue"
+          value={view}
+          options={[
+            ['day', 'Jour'],
+            ['week', 'Semaine'],
+          ]}
+          onChange={setView}
+        />
         <button className="btn small" onClick={() => setReorg(view === 'day' ? date : today)}>
           <Icon.shuffle /> Réorganiser
         </button>
       </div>
-      <div className="row tiny muted" style={{ marginBottom: 8, gap: 6, flexWrap: 'wrap' }}>
-        <span className="chip fixed">Fixe</span>
-        <span className="chip flex">Flexible</span>
-        <span>Glisser un bloc pour le déplacer, son bas pour la durée · glisser sur une zone libre pour créer (au doigt : appui long)</span>
+
+      {view === 'day' && (
+        <nav className="week-strip" aria-label="Jours de la semaine">
+          {Array.from({ length: 7 }, (_, i) => DateTime.fromISO(date, { zone: TZ }).startOf('week').plus({ days: i })).map((d) => {
+            const iso = d.toISODate()!;
+            return (
+              <button key={iso} className={`${iso === date ? 'on' : ''}${iso === today ? ' today' : ''}`} aria-pressed={iso === date} aria-label={longDate(iso)} onClick={() => setDate(iso)}>
+                <span>{d.toFormat('ccccc')}</span>
+                <b>{d.day}</b>
+              </button>
+            );
+          })}
+        </nav>
+      )}
+
+      <div className="people-row" role="group" aria-label="Personnes affichées">
+        {people.map((p) => {
+          const off = hidden.includes(p.id);
+          return (
+            <button key={p.id} className={`person-chip${off ? ' off' : ''}`} aria-pressed={!off} onClick={() => togglePerson(p.id)} title={off ? `Afficher ${p.name}` : `Masquer ${p.name}`}>
+              <Avatar person={p} size={28} />
+              {p.me ? 'Moi' : p.name}
+            </button>
+          );
+        })}
+        <button className="person-chip add" onClick={openShare}>
+          <Icon.plus /> Inviter
+        </button>
       </div>
 
       <div className={`timeline-wrap${view === 'week' ? ' week' : ''}`} ref={wrapRef}>
@@ -373,10 +409,14 @@ export function Agenda() {
                     const h = Math.max(18, e.diff(s, 'minutes').minutes * PX);
                     const l = lay.get(o.id) || { lane: 0, lanes: 1 };
                     const dragging = preview?.id === o.id;
+                    const owner = byId.get(o.ownerId);
+                    const editable = o.canEdit !== false;
+                    const mine = o.ownerId === me.user.id;
+                    const faces = [o.ownerId, ...(o.participantIds || [])].map((id) => byId.get(id)).filter(Boolean) as Person[];
                     return (
                       <div
                         key={o.id}
-                        className={`ev-block ${o.kind}${o.status === 'done' ? ' done' : ''}${dragging ? ' dragging' : ''}`}
+                        className={`ev-block ${o.kind} pc-${owner?.color || me.user.color}${o.status === 'done' ? ' done' : ''}${dragging ? ' dragging' : ''}${o.redacted ? ' busy' : ''}${editable ? '' : ' locked'}`}
                         style={{ top, height: h, left: `calc(${(l.lane / l.lanes) * 100}% + 3px)`, width: `calc(${100 / l.lanes}% - 6px)`, right: 'auto' }}
                         onPointerDown={(ev) => startDrag(ev, o)}
                         onClick={(ev) => {
@@ -386,22 +426,32 @@ export function Agenda() {
                         data-testid="block"
                         data-title={o.title}
                         data-start={o.start}
+                        data-owner={o.ownerId}
                         role="button"
-                        aria-label={`${o.title}, ${time(o.start)} à ${time(o.end)}`}
+                        aria-label={`${o.title}, ${time(o.start)} à ${time(o.end)}${mine || !owner ? '' : ` · agenda de ${owner.name}`}`}
                       >
-                        <span className="grip" aria-hidden="true" data-testid="grip">
-                          <Icon.grip />
-                        </span>
+                        {editable && (
+                          <span className="grip" aria-hidden="true" data-testid="grip">
+                            <Icon.grip />
+                          </span>
+                        )}
                         <div className="b-title ellipsis">
+                          {!editable && <Icon.lock style={{ width: 10, height: 10, marginRight: 3 }} />}
                           {o.isRecurring && <Icon.repeat style={{ width: 10, height: 10, marginRight: 3 }} />}
                           {o.title}
                         </div>
                         {h > 30 && (
-                          <div className="tiny">
+                          <div className="tiny b-time">
                             {time(o.start)}–{time(o.end)}
+                            {o.location ? ` · ${o.location}` : ''}
                           </div>
                         )}
-                        <span className="resize" aria-label={`Modifier la durée de ${o.title}`} data-testid="resize" />
+                        {h > 44 && l.lanes === 1 && (faces.length > 1 || !mine) && (
+                          <span className="b-faces">
+                            <AvatarStack people={faces} size={view === 'week' ? 16 : 20} />
+                          </span>
+                        )}
+                        {editable && <span className="resize" aria-label={`Modifier la durée de ${o.title}`} data-testid="resize" />}
                       </div>
                     );
                   })}

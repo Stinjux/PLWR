@@ -35,6 +35,11 @@ export type Occurrence = {
   goalIds: string[];
   isRecurring: boolean;
   sample: boolean;
+  /** Propriétaire de l'agenda qui contient l'élément. */
+  ownerId: string;
+  /** details : visible en entier par les personnes qui ont accès ; busy : « Occupé » seulement. */
+  visibility: 'details' | 'busy';
+  participantIds: string[];
 };
 
 const SEP = '::';
@@ -47,6 +52,19 @@ export function parseOccId(id: string): { eventId: string; recurrenceId: string 
 
 function goalIdsFor(eventId: string): string[] {
   return all<{ goal_id: string }>('SELECT goal_id FROM goal_links WHERE event_id = ?', eventId).map((r) => r.goal_id);
+}
+
+export function participantIdsFor(eventId: string): string[] {
+  return all<{ user_id: string }>('SELECT user_id FROM event_participants WHERE event_id = ?', eventId).map((r) => r.user_id);
+}
+
+/** Remplace les participants d'un événement (toujours sur l'événement maître d'une série). */
+export function setParticipants(eventId: string, ids: string[] | undefined, ownerId: string) {
+  if (ids === undefined) return;
+  run('DELETE FROM event_participants WHERE event_id = ?', eventId);
+  for (const id of new Set(ids)) {
+    if (id !== ownerId) run('INSERT OR IGNORE INTO event_participants (event_id, user_id) VALUES (?,?)', eventId, id);
+  }
 }
 
 function rowToOcc(row: any, master?: any, recurrenceId?: string | null): Occurrence {
@@ -76,6 +94,9 @@ function rowToOcc(row: any, master?: any, recurrenceId?: string | null): Occurre
     goalIds: goalIdsFor(master ? master.id : row.series_id || row.id),
     isRecurring: Boolean(master || row.series_id || row.rrule),
     sample: Boolean(row.sample),
+    ownerId: row.user_id,
+    visibility: (master ?? row).visibility === 'busy' ? 'busy' : 'details',
+    participantIds: participantIdsFor(master ? master.id : row.series_id || row.id),
   };
 }
 
@@ -230,6 +251,8 @@ export type EventInput = Partial<{
   reminders: number[];
   dueReminders: number[];
   goalIds: string[];
+  visibility: 'details' | 'busy';
+  participantIds: string[];
 }>;
 
 function normalizeTimes(input: EventInput, current?: { start: string | null; durationMin: number }) {
@@ -272,6 +295,7 @@ function columnsFrom(input: EventInput): Record<string, any> {
   if (input.status !== undefined) c.status = input.status;
   if (input.focusDate !== undefined) c.focus_date = input.focusDate || null;
   if (input.reminders !== undefined) c.reminders = JSON.stringify((input.reminders || []).map(Number).filter((n) => n >= 0));
+  if (input.visibility !== undefined) c.visibility = input.visibility === 'busy' ? 'busy' : 'details';
   if (input.dueReminders !== undefined) c.due_reminders = JSON.stringify((input.dueReminders || []).map(Number).filter((n) => n >= 0));
   return c;
 }
@@ -315,6 +339,7 @@ export function createEvent(userId: string, input: EventInput, sample = false): 
       now,
     );
     setGoalLinks(id, input.goalIds, userId);
+    setParticipants(id, input.participantIds, userId);
   });
   return getOccurrence(userId, id)!;
 }
@@ -340,6 +365,7 @@ export function updateOccurrence(userId: string, id: string, input: EventInput, 
       if (cols.start_at) cols.plan_date = null;
       updateRow(eventId, cols);
       setGoalLinks(eventId, input.goalIds, userId);
+      setParticipants(eventId, input.participantIds, userId);
       return getOccurrence(userId, id)!;
     }
     const master = get('SELECT * FROM events WHERE id = ?', eventId)!;
@@ -357,8 +383,12 @@ export function updateOccurrence(userId: string, id: string, input: EventInput, 
       if (input.status !== undefined) delete cols.status; // le statut reste par occurrence
       updateRow(eventId, cols);
       setGoalLinks(eventId, input.goalIds, userId);
+      setParticipants(eventId, input.participantIds, userId);
       return getOccurrence(userId, input.start ? occId(eventId, recurrenceId) : id) ?? occ;
     }
+    // Participants et visibilité valent pour toute la série, même modifiés depuis une occurrence
+    setParticipants(eventId, input.participantIds, userId);
+    if (input.visibility !== undefined) updateRow(eventId, { visibility: input.visibility === 'busy' ? 'busy' : 'details' });
     // scope this → exception
     let ex = get('SELECT * FROM events WHERE series_id = ? AND recurrence_id = ?', eventId, recurrenceId);
     if (!ex) {
@@ -394,6 +424,7 @@ export function updateOccurrence(userId: string, id: string, input: EventInput, 
       ex = get('SELECT * FROM events WHERE id = ?', exId)!;
     }
     const cols: Record<string, any> = { ...columnsFrom(input), ...normalizeTimes(input, { start: ex.start_at, durationMin: ex.duration_min }) };
+    delete cols.visibility;
     if (cols.start_at === null) delete cols.start_at; // une occurrence ne peut pas être « déplanifiée »
     updateRow(ex.id, cols);
     return getOccurrence(userId, id)!;
