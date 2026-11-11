@@ -1,0 +1,9 @@
+node_modules/
+dist/
+data/
+.env
+test-results/
+playwright-report/
+*.log
+tests/.data/
+tests/fixtures/generated/
