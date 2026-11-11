@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="fr-CA">
+<head>
+<meta charset="utf-8">
+<title>Agenda — semaine</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#1C1C1E;text-decoration:none}a:hover{color:#000000}
+button{font:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="min-height: 100vh; box-sizing: border-box; display: flex; flex-wrap: wrap; background: #F7F7F5; color: #1C1C1E; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', Inter, system-ui, sans-serif; -webkit-font-smoothing: antialiased">
+
+  <aside style="flex: 1 1 240px; max-width: 100%; box-sizing: border-box; padding: 28px 20px; display: flex; flex-direction: column; gap: 28px; border-right: 1px solid #ECECEE">
+    <p style="margin: 0; padding: 0 10px; font-size: 17px; font-weight: 700; letter-spacing: -0.01em">PLWR</p>
+
+    <nav aria-label="Navigation principale" style="display: flex; flex-direction: column; gap: 2px">
+      <a href="#" style="height: 40px; padding: 0 10px; border-radius: 10px; display: flex; align-items: center; gap: 10px; font-size: 15px; color: #3A3A3C">Aujourd’hui</a>
+      <a href="#" aria-current="page" style="height: 40px; padding: 0 10px; border-radius: 10px; display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 600; background: #FFFFFF; box-shadow: 0 0 0 1px rgba(0,0,0,0.05)">Agenda</a>
+      <a href="#" style="height: 40px; padding: 0 10px; border-radius: 10px; display: flex; align-items: center; gap: 10px; font-size: 15px; color: #3A3A3C">Objectifs</a>
+      <a href="#" style="height: 40px; padding: 0 10px; border-radius: 10px; display: flex; align-items: center; gap: 10px; font-size: 15px; color: #3A3A3C">Budget</a>
+      <a href="#" style="height: 40px; padding: 0 10px; border-radius: 10px; display: flex; align-items: center; gap: 10px; font-size: 15px; color: #3A3A3C">Réglages</a>
+    </nav>
+
+    <section style="display: flex; flex-direction: column; gap: 4px">
+      <h2 style="margin: 0 0 6px 0; padding: 0 10px; font-size: 12px; font-weight: 600; color: #6E6E73; letter-spacing: 0.04em">PERSONNES</h2>
+      <sc-for list="{{people}}" as="p" hint-placeholder-count="4">
+        <button onClick="{{p.toggle}}" aria-pressed="{{p.on}}" style="height: 40px; padding: 0 10px; border: 0; border-radius: 10px; background: transparent; display: flex; align-items: center; gap: 10px; font-size: 15px; color: #1C1C1E; text-align: left">
+          <span style="{{p.boxStyle}}">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>
+          </span>
+          <span style="flex: 1">{{p.name}}</span>
+        </button>
+      </sc-for>
+      <button style="margin-top: 8px; height: 40px; border: 0; border-radius: 12px; background: #FFFFFF; box-shadow: 0 0 0 1px rgba(0,0,0,0.07); display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 14px; font-weight: 600; color: #1C1C1E">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.2"></circle><path d="M3.5 19c.6-3 2.8-4.6 5.5-4.6s4.9 1.6 5.5 4.6"></path><path d="M18 8v6M15 11h6"></path></svg>
+        Partager l’agenda
+      </button>
+    </section>
+  </aside>
+
+  <main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 28px 32px 40px 32px; display: flex; flex-direction: column; gap: 24px">
+    <header style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px">
+      <div>
+        <p style="margin: 0; font-size: 13px; font-weight: 600; color: #6E6E73">Semaine du 9 au 15 novembre</p>
+        <h1 style="margin: 2px 0 0 0; font-size: 32px; font-weight: 700; letter-spacing: -0.022em; line-height: 1.1">Novembre 2026</h1>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px">
+        <div style="display: flex; gap: 4px">
+          <button aria-label="Semaine précédente" style="width: 36px; height: 36px; border: 0; border-radius: 18px; background: #FFFFFF; box-shadow: 0 0 0 1px rgba(0,0,0,0.07); display: flex; align-items: center; justify-content: center">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1C1C1E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg>
+          </button>
+          <button aria-label="Semaine suivante" style="width: 36px; height: 36px; border: 0; border-radius: 18px; background: #FFFFFF; box-shadow: 0 0 0 1px rgba(0,0,0,0.07); display: flex; align-items: center; justify-content: center">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1C1C1E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"></path></svg>
+          </button>
+        </div>
+        <button style="height: 36px; padding: 0 14px; border: 0; border-radius: 18px; background: #FFFFFF; box-shadow: 0 0 0 1px rgba(0,0,0,0.07); font-size: 14px; font-weight: 500; color: #1C1C1E">Aujourd’hui</button>
+        <div role="group" aria-label="Affichage" style="padding: 3px; border-radius: 12px; background: #EBEBED; display: flex; gap: 2px">
+          <button aria-pressed="false" style="height: 30px; padding: 0 14px; border: 0; border-radius: 9px; background: transparent; font-size: 14px; font-weight: 500; color: #3A3A3C">Jour</button>
+          <button aria-pressed="true" style="height: 30px; padding: 0 14px; border: 0; border-radius: 9px; background: #FFFFFF; box-shadow: 0 1px 3px rgba(0,0,0,0.08); font-size: 14px; font-weight: 600; color: #1C1C1E">Semaine</button>
+        </div>
+        <button style="height: 36px; padding: 0 16px 0 12px; border: 0; border-radius: 18px; background: #1C1C1E; display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; color: #FFFFFF">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
+          Nouvel événement
+        </button>
+      </div>
+    </header>
+
+    <div style="overflow-x: auto; background: #FFFFFF; border-radius: 20px; box-shadow: 0 0 0 1px rgba(0,0,0,0.05)">
+      <div style="min-width: 760px">
+        <div style="display: grid; grid-template-columns: 56px repeat(7, minmax(0, 1fr)); border-bottom: 1px solid #EFEFF1">
+          <span></span>
+          <sc-for list="{{days}}" as="d" hint-placeholder-count="7">
+            <div style="padding: 14px 0 12px 0; display: flex; flex-direction: column; align-items: center; gap: 4px">
+              <span style="font-size: 12px; font-weight: 600; color: #6E6E73; letter-spacing: 0.04em">{{d.label}}</span>
+              <span style="{{d.numStyle}}">{{d.num}}</span>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="position: relative; display: grid; grid-template-columns: 56px repeat(7, minmax(0, 1fr)); height: 632px">
+          <div style="position: relative">
+            <sc-for list="{{hours}}" as="h" hint-placeholder-count="12">
+              <span style="{{h.labelStyle}}">{{h.label}}</span>
+            </sc-for>
+          </div>
+          <sc-for list="{{hours}}" as="h" hint-placeholder-count="12">
+            <span style="{{h.lineStyle}}"></span>
+          </sc-for>
+
+          <sc-for list="{{days}}" as="d" hint-placeholder-count="7">
+            <div style="{{d.colStyle}}">
+              <sc-if value="{{d.today}}" hint-placeholder-val="{{ false }}">
+                <div style="position: absolute; top: 154px; left: -4px; right: 0; display: flex; align-items: center; z-index: 2" aria-label="Maintenant, 10 h 45">
+                  <span style="width: 8px; height: 8px; border-radius: 4px; background: #D93A3F"></span>
+                  <span style="flex: 1; height: 1.5px; background: #D93A3F"></span>
+                </div>
+              </sc-if>
+              <sc-for list="{{d.events}}" as="e" hint-placeholder-count="3">
+                <a href="Event.dc.html" style="{{e.cardStyle}}">
+                  <span style="font-size: 13px; font-weight: 600; letter-spacing: -0.005em; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{e.title}}</span>
+                  <span style="font-size: 12px; color: #48484A; white-space: nowrap">{{e.time}}</span>
+                  <sc-if value="{{e.showAv}}" hint-placeholder-val="{{ true }}">
+                    <span style="display: flex; margin-top: auto">
+                      <sc-for list="{{e.avatars}}" as="a" hint-placeholder-count="2">
+                        <span style="{{a.style}}">{{a.ini}}</span>
+                      </sc-for>
+                    </span>
+                  </sc-if>
+                </a>
+              </sc-for>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { hidden: {} };
+  }
+  fmt(m) {
+    var h = Math.floor(m / 60), mm = m % 60;
+    return h + ' h' + (mm ? ' ' + (mm < 10 ? '0' + mm : mm) : '');
+  }
+  renderVals() {
+    var self = this;
+    var hidden = this.state.hidden;
+    var PEOPLE = [
+      { id: 'moi', name: 'Moi', ini: 'M', c: '#2563EB', t: '#EAF0FD' },
+      { id: 'camille', name: 'Camille', ini: 'C', c: '#2F7A5F', t: '#E7F2EC' },
+      { id: 'lea', name: 'Léa', ini: 'L', c: '#A65A12', t: '#FBEFE2' },
+      { id: 'thomas', name: 'Thomas', ini: 'T', c: '#7A4FB8', t: '#F0EAF8' }
+    ];
+    var byId = {};
+    PEOPLE.forEach(function (p) { byId[p.id] = p; });
+    var ALL = ['moi', 'camille', 'lea', 'thomas'];
+    function t(h, m) { return h * 60 + (m || 0); }
+
+    var WEEK = [
+      { label: 'LUN', num: 9, ev: [
+        ['Course matinale', t(8, 30), t(9, 15), ['moi']],
+        ['Appel fournisseur', t(13), t(14), ['camille']],
+        ['Soccer', t(17, 30), t(18, 45), ['lea']]
+      ] },
+      { label: 'MAR', num: 10, ev: [
+        ['Atelier stratégie', t(9), t(10, 30), ['moi', 'camille']],
+        ['Orthodontiste', t(15), t(16), ['lea', 'thomas']]
+      ] },
+      { label: 'MER', num: 11, ev: [
+        ['Course matinale', t(8, 30), t(9, 15), ['moi']],
+        ['Dîner d’équipe', t(12), t(13), ['camille', 'moi', 'thomas']],
+        ['Devoirs', t(16, 30), t(17, 30), ['lea']]
+      ] },
+      { label: 'JEU', num: 12, today: true, ev: [
+        ['Course matinale', t(8, 30), t(9, 15), ['moi']],
+        ['Réunion d’équipe', t(9, 30), t(10, 30), ['camille', 'moi']],
+        ['Dîner avec Léa', t(12), t(13), ['lea', 'moi']],
+        ['Dentiste', t(14), t(15, 15), ['thomas']],
+        ['Révision du budget', t(16), t(17), ['moi', 'camille']],
+        ['Cours de piano', t(17, 30), t(18, 30), ['lea']]
+      ] },
+      { label: 'VEN', num: 13, ev: [
+        ['Bilan de la semaine', t(10), t(11), ['moi']],
+        ['Garage', t(14), t(15), ['thomas']],
+        ['Souper en famille', t(18), t(19), ALL]
+      ] },
+      { label: 'SAM', num: 14, ev: [
+        ['Marché Jean-Talon', t(9), t(10, 30), ['thomas', 'lea']],
+        ['Randonnée', t(13), t(15), ['moi', 'camille']]
+      ] },
+      { label: 'DIM', num: 15, ev: [
+        ['Brunch', t(10), t(11, 30), ALL],
+        ['Préparer la semaine', t(16), t(17), ['moi']]
+      ] }
+    ];
+
+    var START = t(8), PX = 56 / 60, TOP = 12;
+    var hours = [];
+    for (var h = 8; h <= 19; h++) {
+      var y = (h * 60 - START) * PX + TOP;
+      hours.push({
+        label: h + ' h',
+        labelStyle: 'position: absolute; right: 10px; top: ' + (y - 7) + 'px; font-size: 11px; font-weight: 500; color: #6E6E73',
+        lineStyle: 'position: absolute; left: 56px; right: 0; top: ' + y + 'px; height: 1px; background: #F0F0F2; pointer-events: none'
+      });
+    }
+
+    var days = WEEK.map(function (d, di) {
+      var events = d.ev.filter(function (e) {
+        return e[3].some(function (id) { return !hidden[id]; });
+      }).map(function (e) {
+        var owner = byId[e[3][0]];
+        var dur = e[2] - e[1];
+        var top = (e[1] - START) * PX + TOP + 1;
+        var height = dur * PX - 3;
+        return {
+          title: e[0],
+          time: self.fmt(e[1]) + ' – ' + self.fmt(e[2]),
+          showAv: dur >= 60,
+          cardStyle: 'position: absolute; left: 4px; right: 4px; top: ' + top + 'px; height: ' + height + 'px; box-sizing: border-box; padding: 6px 8px; border-radius: 10px; background: ' + owner.t + '; display: flex; flex-direction: column; gap: 1px; overflow: hidden',
+          avatars: e[3].map(function (id, i) {
+            var p = byId[id];
+            return { ini: p.ini, style: 'width: 18px; height: 18px; border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; color: #FFFFFF; background: ' + p.c + '; box-shadow: 0 0 0 1.5px ' + owner.t + '; margin-left: ' + (i ? '-4px' : '0') };
+          })
+        };
+      });
+      return {
+        label: d.label, num: d.num, today: !!d.today, events: events,
+        numStyle: 'width: 30px; height: 30px; border-radius: 15px; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; ' + (d.today ? 'background: #1C1C1E; color: #FFFFFF' : 'color: #1C1C1E'),
+        colStyle: 'position: relative; grid-column: ' + (di + 2) + '; grid-row: 1; border-left: 1px solid #F0F0F2' + (d.today ? '; background: #FAFAF8' : '')
+      };
+    });
+
+    var people = PEOPLE.map(function (p) {
+      var on = !hidden[p.id];
+      return {
+        name: p.name, on: on ? 'true' : 'false',
+        boxStyle: 'width: 20px; height: 20px; flex: none; border-radius: 6px; display: flex; align-items: center; justify-content: center; box-sizing: border-box; ' + (on ? 'background: ' + p.c : 'background: transparent; border: 1.5px solid #AEAEB2'),
+        toggle: function () {
+          var hh = Object.assign({}, self.state.hidden);
+          hh[p.id] = !hh[p.id];
+          self.setState({ hidden: hh });
+        }
+      };
+    });
+
+    return { people: people, days: days, hours: hours };
+  }
+}
+</script>
+</body>
+</html>
