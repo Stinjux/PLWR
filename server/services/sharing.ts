@@ -206,6 +206,11 @@ export function createInvite(ownerId: string, email: string, role: Role) {
   if (owner?.email === clean) throw new Error('C’est ton propre courriel');
   const existing = get('SELECT 1 FROM calendar_members m JOIN users u ON u.id = m.member_id WHERE m.owner_id = ? AND u.email = ?', ownerId, clean);
   if (existing) throw new Error('Cette personne a déjà accès à ton agenda');
+  const max = config.maxUsers;
+  const hasAccount = get('SELECT 1 FROM users WHERE email = ?', clean);
+  if (!hasAccount && get<{ n: number }>('SELECT COUNT(*) n FROM users')!.n >= max) {
+    throw new Error(`PLWR est limité à ${max} comptes pour l’instant : toutes les places sont prises.`);
+  }
   const id = uid();
   tx(() => {
     // Une seule invitation en attente par courriel : la nouvelle remplace l'ancienne

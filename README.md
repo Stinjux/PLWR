@@ -126,6 +126,12 @@ Il faut **HTTPS** (notifications, installation sur iPhone, cookies `Secure`) et 
 
 **Agenda** – vues jour et semaine ; glisser la poignée ⋮⋮ pour déplacer (aussi d’un jour à l’autre en vue semaine), tirer le bas du bloc pour la durée ; événements récurrents (jour, semaine avec jours choisis, mois, date de fin) avec « cette occurrence / toute la série ». Rendez-vous fixes (bleu, plein) et tâches flexibles (vert, pointillé) avec durée estimée, échéance, priorité, plage préférée. Bouton « Se prolonge +15/+30/+45 » sur un rendez-vous, puis **Réorganiser ma journée** : proposition respectant les fixes, les pauses choisies et un battement entre blocs, aperçu avant/après, acceptation ligne par ligne, tâches qui ne rentrent pas avec un autre créneau proposé (jours suivants) ou « demain, à placer ».
 
+**Comptes, connexion et sauvegardes** :
+- **Limite** : 6 comptes au maximum (`MAX_USERS`), invitations comprises. La page de connexion affiche les places libres.
+- **Connexion** : la session reste ouverte tant qu’on utilise l’app (prolongée automatiquement).
+- **Avertissements** : si les données ne sont pas sur un volume Railway, la page de connexion et Réglages le signalent en rouge.
+- **Sauvegardes** : une copie de la base par jour dans `DATA_DIR/backups` (7 gardées). Réglages → Données et sauvegardes, réservé au premier compte, permet de télécharger une sauvegarde complète.
+
 **Accueil (onboarding)** – après la création du compte, en trois étapes :
 1. **Profil, obligatoire** : prénom, âge, profession et salaire (par année, par mois, aux 2 semaines ou par semaine, brut ou net). Un salaire net avec une date de paie devient un revenu récurrent, ce qui alimente « Jusqu’à la prochaine paie ».
 2. **Dépenses fixes mensuelles** (facultatif) : loyer, Hydro, Internet, cellulaire, assurances, garderie… Elles deviennent des paiements récurrents du budget, avec un rappel 2 jours avant.

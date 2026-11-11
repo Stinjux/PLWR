@@ -475,3 +475,12 @@ textarea.input { min-height: 80px; resize: vertical; }
 .group > li.total-row { min-height: 48px; background: var(--surface-2); }
 .suggestion { border: 0; border-radius: 12px; padding: 10px 12px; background: var(--fixed-soft); color: var(--text); text-align: left; font-size: 0.875rem; cursor: pointer; }
 @media (min-width: 700px) { .preset-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+
+/* ---------- Connexion ---------- */
+.auth { max-width: 420px; margin: 0 auto; padding: calc(env(safe-area-inset-top, 0px) + 9vh) 20px 40px; }
+.auth-head { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 6px; margin-bottom: 26px; }
+.auth-head img { border-radius: 18px; box-shadow: 0 8px 24px rgb(0 0 0 / 12%); margin-bottom: 8px; }
+.auth-head h1 { margin: 0; font-size: 2.5rem; }
+.auth-head p { margin: 0; }
+.auth-card { padding: 20px; gap: 14px; }
+.auth-card h2 { margin: 0; font-size: 1.375rem; letter-spacing: -0.015em; }

@@ -5,7 +5,8 @@ import { HTTPException } from 'hono/http-exception';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { DateTime } from 'luxon';
 import { all, get, run, uid, nowIso, parseJson, tx } from './db.ts';
-import { config, pushEnabled, pushState } from './config.ts';
+import { config, pushEnabled, pushState, storage } from './config.ts';
+import { backupBuffer, backupNow, isAdmin, listBackups } from './services/backup.ts';
 import {
   createSession,
   destroySession,
@@ -141,9 +142,12 @@ const body = async <T = any>(c: any): Promise<T> => {
 };
 
 // ---------- Authentification ----------
+const userCount = () => get<{ n: number }>('SELECT COUNT(*) n FROM users')!.n;
+
 app.get('/api/auth/status', (c) => {
-  const hasUsers = Boolean(get('SELECT 1 FROM users LIMIT 1'));
-  return c.json({ hasUsers, signupOpen: !hasUsers || config.allowSignup });
+  const users = userCount();
+  const full = users >= config.maxUsers;
+  return c.json({ hasUsers: users > 0, signupOpen: (users === 0 || config.allowSignup) && !full, users, maxUsers: config.maxUsers, full, persistent: storage.persistent });
 });
 
 app.post('/api/auth/register', async (c) => {
@@ -154,6 +158,7 @@ app.post('/api/auth/register', async (c) => {
   const invite = b.invite ? describeInvite(b.invite) : null;
   if (b.invite && !invite) throw new HTTPException(400, { message: 'Invitation invalide ou expirée' });
   if (hasUsers && !config.allowSignup && !invite) throw new HTTPException(403, { message: 'Les inscriptions sont fermées' });
+  if (userCount() >= config.maxUsers) throw new HTTPException(403, { message: `PLWR est limité à ${config.maxUsers} comptes pour l’instant : toutes les places sont prises.` });
   const email = String(b.email || '').trim().toLowerCase();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new HTTPException(400, { message: 'Courriel invalide' });
   if (String(b.password || '').length < 10) throw new HTTPException(400, { message: 'Le mot de passe doit contenir au moins 10 caractères' });
@@ -266,6 +271,29 @@ api.get('/me', (c) => {
     hasSamples: hasSamples(u.id),
     today: today(u.timezone),
     onboarding: onboardingState(u.id),
+    isAdmin: isAdmin(u.id),
+  });
+});
+
+// ---------- Données et sauvegardes (premier compte seulement) ----------
+const requireAdmin = (c: any) => {
+  if (!isAdmin(U(c).id)) throw new HTTPException(403, { message: 'Réservé à la personne qui administre PLWR' });
+};
+api.get('/admin/storage', (c) => {
+  requireAdmin(c);
+  return c.json({ ...storage, users: userCount(), maxUsers: config.maxUsers, backups: listBackups() });
+});
+api.post('/admin/backup', (c) => {
+  requireAdmin(c);
+  backupNow();
+  return c.json({ backups: listBackups() });
+});
+/** Télécharge une copie complète de la base (à garder hors du serveur). */
+api.get('/admin/backup/download', (c) => {
+  requireAdmin(c);
+  const name = `plwr-${DateTime.now().setZone(config.defaultTimezone).toFormat("yyyy-LL-dd'_'HH'h'mm")}.sqlite`;
+  return new Response(new Uint8Array(backupBuffer()), {
+    headers: { 'content-type': 'application/vnd.sqlite3', 'content-disposition': `attachment; filename="${name}"`, 'cache-control': 'no-store' },
   });
 });
 

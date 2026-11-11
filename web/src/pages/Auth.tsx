@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { InviteHeader, useInvite } from './Invite';
+import { Seg } from '../components/ui';
 
 export function Auth({ onDone, invite }: { onDone: () => void; invite?: string | null }) {
-  const [status, setStatus] = useState<{ hasUsers: boolean; signupOpen: boolean } | null>(null);
+  const [status, setStatus] = useState<{ hasUsers: boolean; signupOpen: boolean; users: number; maxUsers: number; full: boolean; persistent: boolean } | null>(null);
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -48,21 +49,43 @@ export function Auth({ onDone, invite }: { onDone: () => void; invite?: string |
       setBusy(false);
     }
   }
-  const canRegister = Boolean(info) || Boolean(status?.signupOpen);
+  const canRegister = (Boolean(info) || Boolean(status?.signupOpen)) && !status?.full;
   return (
     <div className="auth">
       {info ? (
         <InviteHeader info={info} />
       ) : (
-        <div className="center" style={{ marginBottom: 24 }}>
-          <img src="/icon.svg" alt="" width={64} height={64} />
+        <div className="auth-head">
+          <img src="/icon.svg" alt="" width={72} height={72} />
           <h1>PLWR</h1>
-          <div className="muted small">Agenda, objectifs et budget</div>
+          <p className="muted">Ton temps et ton argent, au même endroit.</p>
+        </div>
+      )}
+      {status && !status.persistent && (
+        <div className="banner danger small" role="alert" style={{ marginBottom: 12 }}>
+          <span>
+            <b>Données non sauvegardées sur ce serveur.</b> Elles seront effacées à la prochaine mise à jour. La personne qui administre PLWR doit ajouter un volume Railway (Réglages → Données et
+            sauvegardes).
+          </span>
         </div>
       )}
       {invite && inv.isError && <div className="banner danger small" style={{ marginBottom: 12 }}>Ce lien d’invitation a expiré ou a été désactivé. Demande un nouveau lien.</div>}
-      <form className="card stack" onSubmit={submit}>
-        <h2>{mode === 'login' ? 'Connexion' : 'Créer mon compte'}</h2>
+      {status?.hasUsers && canRegister && (
+        <div style={{ marginBottom: 12 }}>
+          <Seg
+            full
+            label="Connexion ou inscription"
+            value={mode}
+            onChange={(m) => (setMode(m), setError(null))}
+            options={[
+              ['login', 'Connexion'],
+              ['register', 'Créer un compte'],
+            ]}
+          />
+        </div>
+      )}
+      <form className="card stack auth-card" onSubmit={submit}>
+        <h2>{mode === 'login' ? (info ? 'Connecte-toi pour rejoindre' : 'Bon retour') : status?.hasUsers ? 'Créer mon compte' : 'Créer le premier compte'}</h2>
         {mode === 'register' && (
           <label className="field">
             Prénom
@@ -83,15 +106,19 @@ export function Auth({ onDone, invite }: { onDone: () => void; invite?: string |
           </label>
         )}
         {error && <div className="error">{error}</div>}
-        <button className="btn primary" disabled={busy}>
+        <button className="btn primary" disabled={busy || (mode === 'register' && !canRegister && Boolean(status?.hasUsers))}>
           {mode === 'login' ? (info ? 'Se connecter et rejoindre' : 'Se connecter') : info ? 'Créer le compte et rejoindre' : 'Créer le compte'}
         </button>
-        {canRegister && status?.hasUsers && (
-          <button type="button" className="btn ghost small" onClick={() => setMode(mode === 'login' ? 'register' : 'login')}>
-            {mode === 'login' ? 'Créer un compte' : 'J’ai déjà un compte'}
-          </button>
-        )}
+        <p className="tiny muted center" style={{ margin: 0 }}>
+          Tu restes connecté·e sur cet appareil tant que tu utilises PLWR.
+        </p>
       </form>
+      {status?.hasUsers && (
+        <p className="tiny muted center" style={{ marginTop: 14 }} data-testid="seats">
+          {status.full ? `Toutes les places sont prises (${status.maxUsers} comptes).` : `${status.users} compte${status.users > 1 ? 's' : ''} sur ${status.maxUsers} · ${status.maxUsers - status.users} place${status.maxUsers - status.users > 1 ? 's' : ''} libre${status.maxUsers - status.users > 1 ? 's' : ''}`}
+          {!status.full && !status.signupOpen && !info && ' · sur invitation seulement'}
+        </p>
+      )}
     </div>
   );
 }
