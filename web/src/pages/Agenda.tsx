@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+
+type Sel = { d0: number; d1: number; m0: number; m1: number };
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { DateTime } from 'luxon';
@@ -50,6 +52,9 @@ export function Agenda() {
   const [preview, setPreview] = useState<Preview | null>(null);
   const [reorg, setReorg] = useState<string | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
+  const [sel, setSel] = useState<Sel | null>(null);
+  const selecting = useRef(false);
 
   const days = useMemo(() => {
     const d = DateTime.fromISO(date, { zone: TZ });
@@ -133,13 +138,87 @@ export function Agenda() {
     el.addEventListener('pointercancel', up);
   }
 
-  function newAt(day: string, e: React.MouseEvent) {
-    if (e.target !== e.currentTarget) return;
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const minutes = Math.floor((e.clientY - rect.top) / PX / 30) * 30;
-    const start = DateTime.fromISO(day, { zone: TZ }).plus({ minutes }).toUTC().toISO()!;
-    openEditor({ mode: 'new', kind: 'fixed', start });
+  // Empêche le défilement pendant une sélection au doigt (écouteur non passif)
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const block = (e: TouchEvent) => {
+      if (selecting.current) e.preventDefault();
+    };
+    el.addEventListener('touchmove', block, { passive: false });
+    return () => el.removeEventListener('touchmove', block);
+  }, []);
+
+  /** Position (jour, minute arrondie au quart d'heure) sous le pointeur. */
+  function cellAt(clientX: number, clientY: number) {
+    const r = gridRef.current!.getBoundingClientRect();
+    const colW = (r.width - 46) / days.length;
+    const d = Math.min(days.length - 1, Math.max(0, Math.floor((clientX - r.left - 46) / colW)));
+    const m = Math.min(1440, Math.max(0, Math.round((clientY - r.top) / PX / SNAP) * SNAP));
+    return { d, m };
   }
+
+  /**
+   * Cliquer-glisser sur une zone libre pour sélectionner une plage (comme Outlook).
+   * Souris : immédiat. Doigt : appui long (0,35 s) puis glisser. En vue semaine, glisser sur plusieurs jours
+   * sélectionne la même plage chaque jour et propose une récurrence hebdomadaire sur ces jours.
+   */
+  function onGridPointerDown(e: React.PointerEvent) {
+    const t = e.target as HTMLElement;
+    if (t.closest('.ev-block') || e.button > 0) return;
+    if (e.clientX - gridRef.current!.getBoundingClientRect().left < 46) return; // colonne des heures
+    const start = cellAt(e.clientX, e.clientY);
+    const anchor = { d: start.d, m: Math.floor(start.m / SNAP) * SNAP };
+    const x0 = e.clientX, y0 = e.clientY;
+    let moved = false;
+    let timer: number | undefined;
+    let current: Sel = { d0: anchor.d, d1: anchor.d, m0: anchor.m, m1: anchor.m + 30 };
+    const begin = () => {
+      selecting.current = true;
+      setSel(current);
+      navigator.vibrate?.(10);
+    };
+    if (e.pointerType === 'mouse') begin();
+    else timer = window.setTimeout(begin, 350);
+
+    const move = (ev: PointerEvent) => {
+      if (!selecting.current) {
+        if (Math.hypot(ev.clientX - x0, ev.clientY - y0) > 8) {
+          clearTimeout(timer); // l'utilisateur fait défiler
+          cleanup();
+        }
+        return;
+      }
+      moved = moved || Math.hypot(ev.clientX - x0, ev.clientY - y0) > 6;
+      const c = cellAt(ev.clientX, ev.clientY);
+      const lo = Math.min(anchor.m, c.m), hi = Math.max(anchor.m + SNAP, c.m);
+      current = { d0: Math.min(anchor.d, c.d), d1: Math.max(anchor.d, c.d), m0: lo, m1: Math.max(lo + SNAP, hi) };
+      setSel(current);
+    };
+    const up = () => {
+      clearTimeout(timer);
+      const was = selecting.current;
+      cleanup();
+      if (!was) return;
+      // Un simple clic propose une heure ; une sélection propose exactement la plage choisie
+      const s0 = moved ? current : { ...current, m0: Math.floor(anchor.m / 30) * 30, m1: Math.floor(anchor.m / 30) * 30 + 60 };
+      const first = DateTime.fromISO(days[s0.d0], { zone: TZ });
+      const byDay = s0.d1 > s0.d0 ? days.slice(s0.d0, s0.d1 + 1).map((x) => DateTime.fromISO(x, { zone: TZ }).weekday) : undefined;
+      openEditor({ mode: 'new', kind: 'fixed', start: first.plus({ minutes: s0.m0 }).toUTC().toISO()!, durationMin: s0.m1 - s0.m0, byDay });
+      setTimeout(() => setSel(null), 300);
+    };
+    function cleanup() {
+      selecting.current = false;
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+    }
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+  }
+
+  const hhmm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}h${String(m % 60).padStart(2, '0')}`;
 
   const breaks: { label: string; start: string; end: string }[] = me.settings.breaks || [];
   const toMin = (s: string) => Number(s.slice(0, 2)) * 60 + Number(s.slice(3, 5));
@@ -183,7 +262,7 @@ export function Agenda() {
       <div className="row tiny muted" style={{ marginBottom: 8, gap: 6, flexWrap: 'wrap' }}>
         <span className="chip fixed">Fixe</span>
         <span className="chip flex">Flexible</span>
-        <span>⋮⋮ déplacer · bas du bloc : durée · toucher : modifier</span>
+        <span>Glisser sur une zone libre : nouvelle plage (appui long au doigt) · ⋮⋮ déplacer · bas du bloc : durée</span>
       </div>
 
       <div className={`timeline-wrap${view === 'week' ? ' week' : ''}`} ref={wrapRef}>
@@ -197,7 +276,7 @@ export function Agenda() {
             ))}
           </div>
         )}
-        <div className="timeline" style={{ gridTemplateColumns: gridCols, height: 1440 * PX }}>
+        <div className="timeline" ref={gridRef} style={{ gridTemplateColumns: gridCols, height: 1440 * PX }} onPointerDown={onGridPointerDown}>
           <div className="tl-hours">
             {Array.from({ length: 24 }, (_, h) => (
               <div key={h} className="tl-hour-label" style={{ top: h * 60 * PX }}>
@@ -211,7 +290,7 @@ export function Agenda() {
               const lay = layoutColumn(items);
               const dayStart = DateTime.fromISO(d, { zone: TZ });
               return (
-                <div key={d} className={`tl-col${d === today && view === 'week' ? ' today' : ''}`} onClick={(e) => newAt(d, e)} data-testid={`col-${d}`}>
+                <div key={d} className={`tl-col${d === today && view === 'week' ? ' today' : ''}`} data-testid={`col-${d}`}>
                   {Array.from({ length: 24 }, (_, h) => (
                     <div key={h} className="tl-line" style={{ top: h * 60 * PX }} />
                   ))}
@@ -222,6 +301,11 @@ export function Agenda() {
                     <div key={b.label} className="tl-break" style={{ top: toMin(b.start) * PX, height: (toMin(b.end) - toMin(b.start)) * PX }} title={b.label} />
                   ))}
                   {d === today && <div className="tl-now" style={{ top: nowMin * PX }} />}
+                  {sel && days.indexOf(d) >= sel.d0 && days.indexOf(d) <= sel.d1 && (
+                    <div className="tl-sel" style={{ top: sel.m0 * PX, height: (sel.m1 - sel.m0) * PX }} data-testid="selection">
+                      {days.indexOf(d) === sel.d0 && `${hhmm(sel.m0)}–${hhmm(sel.m1)}`}
+                    </div>
+                  )}
                   {items.map((o) => {
                     const s = dt(o.start!), e = dt(o.end!);
                     const top = s.diff(dayStart, 'minutes').minutes * PX;

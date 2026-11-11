@@ -3,9 +3,10 @@ import { all, get, run, uid, nowIso, parseJson, tx } from '../db.ts';
 import { toUtcIso } from '../time.ts';
 
 export type RRule = {
-  freq: 'daily' | 'weekly' | 'monthly';
+  freq: 'daily' | 'weekly' | 'monthly' | 'yearly';
   interval?: number;
-  byDay?: number[]; // 1 = lundi … 7 = dimanche
+  byDay?: number[]; // 1 = lundi … 7 = dimanche (hebdomadaire) ; mensuel : jour de semaine avec bySetPos
+  bySetPos?: number | null; // mensuel : 1 à 4 = 1er…4e, -1 = dernier (ex. « le 2e mardi »)
   until?: string | null; // YYYY-MM-DD (inclus)
   count?: number | null;
 };
@@ -112,6 +113,24 @@ export function expandRule(startIso: string, rule: RRule, tz: string, fromIso: s
         }
       }
       if (!cont) break;
+    } else if (rule.freq === 'monthly' && rule.bySetPos && rule.byDay?.length) {
+      // « le 2e mardi », « le dernier vendredi » du mois
+      const month = start.startOf('month').plus({ months: i * interval });
+      const wd = rule.byDay[0];
+      let d: DateTime;
+      if (rule.bySetPos > 0) {
+        const first = month.plus({ days: (wd - month.weekday + 7) % 7 });
+        d = first.plus({ weeks: rule.bySetPos - 1 });
+        if (d.month !== month.month) continue; // pas de 5e occurrence ce mois-ci
+      } else {
+        const last = month.endOf('month').startOf('day');
+        d = last.minus({ days: (last.weekday - wd + 7) % 7 });
+      }
+      d = d.set(time);
+      if (d < start) continue;
+      if (!push(d)) break;
+    } else if (rule.freq === 'yearly') {
+      if (!push(start.plus({ years: i * interval }).set(time))) break;
     } else {
       const d = start.plus({ months: i * interval }).set(time);
       if (!push(d)) break;

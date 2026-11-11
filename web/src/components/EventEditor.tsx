@@ -5,6 +5,7 @@ import { api } from '../lib/api';
 import { TZ, dt, duration, fromLocalInput, goalValue, time, toLocalInput, todayIso, dayLabel } from '../lib/format';
 import { Icon, Seg, Sheet, useToast, Check } from './ui';
 import { ReorganizeDialog } from './ReorganizeDialog';
+import { RecurrenceEditor, recFromRule, ruleFromRec, type Rec, type Rule } from './RecurrenceEditor';
 
 export type Occ = {
   id: string;
@@ -22,7 +23,7 @@ export type Occ = {
   planDate: string | null;
   location: string | null;
   notes: string | null;
-  rrule: { freq: string; interval?: number; byDay?: number[]; until?: string | null } | null;
+  rrule: Rule | null;
   status: 'active' | 'done' | 'cancelled';
   focusDate: string | null;
   reminders: number[];
@@ -32,7 +33,9 @@ export type Occ = {
   nextReminders?: { fireAt: string; title: string; deferredByQuietHours: boolean; kind: string }[];
 };
 
-export type EditorTarget = { mode: 'new'; kind: 'fixed' | 'flexible'; start?: string; planDate?: string } | { mode: 'edit'; id: string; action?: 'complete' };
+export type EditorTarget =
+  | { mode: 'new'; kind: 'fixed' | 'flexible'; start?: string; durationMin?: number; byDay?: number[]; planDate?: string }
+  | { mode: 'edit'; id: string; action?: 'complete' };
 
 const REMINDER_OPTIONS: [number, string][] = [
   [0, 'À l’heure'],
@@ -43,7 +46,6 @@ const REMINDER_OPTIONS: [number, string][] = [
   [60, '1 h'],
   [1440, 'La veille'],
 ];
-const DAYS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
 
 export function useGoalsList() {
   return useQuery({ queryKey: ['goals'], queryFn: () => api.get<any[]>('/api/goals') });
@@ -110,16 +112,17 @@ export function EventEditor({ target, onClose }: { target: EditorTarget; onClose
         kind: target.kind,
         scheduled: target.kind === 'fixed' || Boolean(target.start),
         startLocal: toLocalInput(start),
-        durationMin: target.kind === 'fixed' ? 60 : 30,
+        durationMin: target.durationMin || (target.kind === 'fixed' ? 60 : 30),
         planDate: target.planDate || todayIso(),
         dueLocal: '',
         priority: 2,
         preferredWindow: '',
         location: '',
         notes: '',
-        repeat: 'none',
-        byDay: [DateTime.fromISO(start).setZone(TZ).weekday],
-        until: '',
+        // Sélection sur plusieurs jours en vue semaine → récurrence hebdomadaire sur ces jours
+        rec: target.byDay && target.byDay.length > 1
+          ? { ...recFromRule(null, toLocalInput(start)), repeat: target.byDay.length === 5 && [1, 2, 3, 4, 5].every((x) => target.byDay!.includes(x)) ? 'weekdays' : 'weekly', byDay: target.byDay }
+          : recFromRule(null, toLocalInput(start)),
         reminders: target.kind === 'fixed' || target.start ? [10] : [],
         dueReminders: [],
         goalIds: [],
@@ -138,9 +141,7 @@ export function EventEditor({ target, onClose }: { target: EditorTarget; onClose
         preferredWindow: o.preferredWindow || '',
         location: o.location || '',
         notes: o.notes || '',
-        repeat: o.rrule?.freq || 'none',
-        byDay: o.rrule?.byDay || [o.start ? dt(o.start).weekday : 1],
-        until: o.rrule?.until || '',
+        rec: recFromRule(o.rrule, toLocalInput(o.start || DateTime.now().setZone(TZ).toISO())),
         reminders: o.reminders,
         dueReminders: o.dueReminders,
         goalIds: o.goalIds,
@@ -169,7 +170,7 @@ export function EventEditor({ target, onClose }: { target: EditorTarget; onClose
     };
     if (form.scheduled) {
       p.start = fromLocalInput(form.startLocal);
-      p.rrule = form.repeat === 'none' ? null : { freq: form.repeat, byDay: form.repeat === 'weekly' ? form.byDay : undefined, until: form.until || null };
+      p.rrule = ruleFromRec(form.rec as Rec, form.startLocal);
     } else {
       p.start = null;
       p.planDate = form.planDate;
@@ -316,6 +317,11 @@ export function EventEditor({ target, onClose }: { target: EditorTarget; onClose
           <label className="field">
             {form.kind === 'fixed' ? 'Durée (min)' : 'Durée estimée (min)'}
             <input className="input" type="number" min={5} step={5} value={form.durationMin} onChange={(e) => set({ durationMin: e.target.value })} aria-label="Durée" />
+            {form.scheduled && form.startLocal && (
+              <span className="tiny muted" data-testid="computed-end">
+                Fin : {DateTime.fromISO(form.startLocal, { zone: TZ }).plus({ minutes: Number(form.durationMin) || 0 }).toFormat("HH'h'mm")}
+              </span>
+            )}
           </label>
           {form.kind === 'flexible' && (
             <>
@@ -350,41 +356,7 @@ export function EventEditor({ target, onClose }: { target: EditorTarget; onClose
             </label>
           )}
         </div>
-        {form.scheduled && (
-          <div className="stack" style={{ gap: 6 }}>
-            <label className="field">
-              Répétition
-              <select className="input" value={form.repeat} onChange={(e) => set({ repeat: e.target.value })} aria-label="Répétition">
-                <option value="none">Aucune</option>
-                <option value="daily">Chaque jour</option>
-                <option value="weekly">Chaque semaine</option>
-                <option value="monthly">Chaque mois</option>
-              </select>
-            </label>
-            {form.repeat === 'weekly' && (
-              <div className="row" role="group" aria-label="Jours">
-                {DAYS.map((d, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    className={`chip`}
-                    style={form.byDay.includes(i + 1) ? { background: 'var(--primary)', color: 'var(--primary-ink)' } : undefined}
-                    aria-pressed={form.byDay.includes(i + 1)}
-                    onClick={() => set({ byDay: form.byDay.includes(i + 1) ? form.byDay.filter((x: number) => x !== i + 1) : [...form.byDay, i + 1] })}
-                  >
-                    {d}
-                  </button>
-                ))}
-              </div>
-            )}
-            {form.repeat !== 'none' && (
-              <label className="field">
-                Jusqu’au (optionnel)
-                <input className="input" type="date" value={form.until} onChange={(e) => set({ until: e.target.value })} />
-              </label>
-            )}
-          </div>
-        )}
+        {form.scheduled && <RecurrenceEditor value={form.rec} startLocal={form.startLocal} onChange={(rec) => set({ rec })} />}
         {form.scheduled && (
           <div>
             <div className="small muted" style={{ fontWeight: 600, marginBottom: 6 }}>

@@ -218,6 +218,8 @@ textarea.input { min-height: 80px; resize: vertical; }
 .tl-line { position: absolute; left: 0; right: 0; border-top: 1px solid var(--border); }
 .tl-line.half { border-top-style: dashed; opacity: 0.5; }
 .tl-break { position: absolute; left: 0; right: 0; background: repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in srgb, var(--muted) 12%, transparent) 6px 12px); }
+.tl-sel { position: absolute; left: 2px; right: 2px; z-index: 5; border-radius: 8px; overflow: hidden; line-height: 1.2; word-break: break-all; background: color-mix(in srgb, var(--primary) 22%, transparent); border: 2px solid var(--primary); color: var(--primary); font-size: 0.75rem; font-weight: 700; padding: 2px 6px; pointer-events: none; }
+.timeline { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .tl-now { position: absolute; left: 0; right: 0; border-top: 2px solid var(--danger); z-index: 4; }
 .tl-days { display: grid; position: sticky; top: 0; z-index: 6; background: var(--surface); border-bottom: 1px solid var(--border); }
 .tl-days div { text-align: center; font-size: 0.78rem; padding: 6px 2px; font-weight: 600; cursor: pointer; }

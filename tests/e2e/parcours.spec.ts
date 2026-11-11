@@ -269,3 +269,59 @@ test('Rappel envoyé par le serveur à l’heure prévue, puis « Reporter »', 
   await page.getByRole('button', { name: '10 min' }).click();
   await expect(page.getByText(/Rappel reporté à/)).toBeVisible();
 });
+
+test('Agenda : cliquer-glisser une plage (comme Outlook) et régler la récurrence', async ({ page }) => {
+  await signup(page);
+  await nav(page, 'Agenda');
+  // Vue jour, demain : glisser de 7 h à 8 h 30
+  await page.getByRole('button', { name: 'Jour', exact: true }).click();
+  await page.getByRole('button', { name: 'Suivant' }).click();
+  const tomorrow = DateTime.now().setZone(TZ).plus({ days: 1 });
+  const col = page.getByTestId(`col-${tomorrow.toISODate()}`);
+  await page.locator('.timeline-wrap').evaluate((e) => (e.scrollTop = 6 * 60));
+  const box = (await col.boundingBox())!;
+  const yAt = (min: number) => box.y + min; // 1 px = 1 min, haut de colonne = minuit
+  await page.mouse.move(box.x + box.width / 2, yAt(7 * 60 + 2));
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2, yAt(8 * 60), { steps: 4 });
+  await page.mouse.move(box.x + box.width / 2, yAt(8 * 60 + 30), { steps: 4 });
+  await expect(page.getByTestId('selection')).toContainText('07h00–08h30');
+  await page.mouse.up();
+  await expect(page.getByRole('spinbutton', { name: 'Durée' })).toHaveValue('90');
+  await expect(page.getByTestId('computed-end')).toHaveText('Fin : 08h30');
+  await page.getByLabel('Titre', { exact: true }).fill('Lecture du matin');
+  // Récurrence mensuelle « le Ne jour » puis tous les 2 jours, 5 fois
+  await page.getByLabel('Répétition').selectOption('monthly');
+  await page.getByRole('button', { name: /^Le (1er|2e|3e|4e|dernier) / }).click();
+  await expect(page.getByTestId('recurrence-summary')).toContainText(/Chaque mois le (1er|2e|3e|4e|dernier) \w+ à 07h00/);
+  await page.getByLabel('Répétition').selectOption('daily');
+  await page.getByLabel('Intervalle').fill('2');
+  await page.getByRole('button', { name: 'Après…' }).click();
+  await page.getByLabel('Nombre d’occurrences').fill('5');
+  await expect(page.getByTestId('recurrence-summary')).toHaveText('Tous les 2 jours à 07h00, 5 fois');
+  await page.getByRole('button', { name: 'Enregistrer' }).click();
+  await expect(page.locator('[data-testid=block][data-title="Lecture du matin"]')).toHaveCount(1);
+  await page.getByRole('button', { name: 'Suivant' }).click();
+  await expect(page.locator('[data-testid=block][data-title="Lecture du matin"]')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Suivant' }).click();
+  await expect(page.locator('[data-testid=block][data-title="Lecture du matin"]')).toHaveCount(1);
+
+  // Vue semaine (semaine prochaine) : glisser du lundi au mercredi de 6 h à 7 h → hebdomadaire sur ces 3 jours
+  await page.getByRole('button', { name: 'Semaine', exact: true }).click();
+  await page.getByRole('button', { name: 'Suivant' }).click();
+  const shownMonday = await page.getByTestId(/^col-/).first().getAttribute('data-testid');
+  const mon = page.getByTestId(shownMonday!);
+  const wed = page.getByTestId(`col-${DateTime.fromISO(shownMonday!.slice(4)).plus({ days: 2 }).toISODate()}`);
+  await page.locator('.timeline-wrap').evaluate((e) => (e.scrollTop = 5 * 60));
+  const b1 = (await mon.boundingBox())!, b3 = (await wed.boundingBox())!;
+  await page.mouse.move(b1.x + b1.width / 2, b1.y + 6 * 60 + 2);
+  await page.mouse.down();
+  await page.mouse.move(b3.x + b3.width / 2, b3.y + 6 * 60 + 30, { steps: 5 });
+  await page.mouse.move(b3.x + b3.width / 2, b3.y + 7 * 60, { steps: 5 });
+  await expect(page.getByTestId('selection')).toHaveCount(3);
+  await page.mouse.up();
+  await expect(page.getByTestId('recurrence-summary')).toHaveText('Chaque semaine le lundi, mardi, mercredi à 06h00');
+  await page.getByLabel('Titre', { exact: true }).fill('Course matinale');
+  await page.getByRole('button', { name: 'Enregistrer' }).click();
+  await expect(page.locator('[data-testid=block][data-title="Course matinale"]')).toHaveCount(3);
+});

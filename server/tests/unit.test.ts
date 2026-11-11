@@ -147,3 +147,20 @@ test('numéros de carte : zones repérées et texte masqué', () => {
   assert.equal(maskCardText('Visa 4520 1234 5678 9012'), 'Visa •••• 9012');
   assert.equal(findCardNumberBoxes({ text: '', confidence: 90, lines: [{ text: '', confidence: 90, words: [w('72,30', 0), w('$', 60)] }] }).length, 0);
 });
+
+test('récurrences façon Outlook : tous les 2 jours, 2e mardi du mois, dernier vendredi, après N occurrences, annuelle', () => {
+  const local = (xs: string[]) => xs.map((x) => DateTime.fromISO(x).setZone(TZ).toFormat('yyyy-LL-dd HH:mm'));
+  assert.deepEqual(local(expandRule(at('09:00', '2026-11-02'), { freq: 'daily', interval: 2, count: 3 }, TZ, at('00:00', '2026-11-01'), at('00:00', '2026-12-01'))), [
+    '2026-11-02 09:00', '2026-11-04 09:00', '2026-11-06 09:00',
+  ]);
+  assert.deepEqual(local(expandRule(at('18:00', '2026-11-10'), { freq: 'monthly', byDay: [2], bySetPos: 2 }, TZ, at('00:00', '2026-11-01'), at('00:00', '2027-02-01'))), [
+    '2026-11-10 18:00', '2026-12-08 18:00', '2027-01-12 18:00',
+  ]);
+  assert.deepEqual(local(expandRule(at('16:00', '2026-11-27'), { freq: 'monthly', byDay: [5], bySetPos: -1 }, TZ, at('00:00', '2026-11-01'), at('00:00', '2027-01-01'))), [
+    '2026-11-27 16:00', '2026-12-25 16:00',
+  ]);
+  assert.deepEqual(local(expandRule(at('07:00', '2026-11-09'), { freq: 'weekly', byDay: [1, 2, 3, 4, 5], until: '2026-11-11' }, TZ, at('00:00', '2026-11-01'), at('00:00', '2026-12-01'))), [
+    '2026-11-09 07:00', '2026-11-10 07:00', '2026-11-11 07:00',
+  ]);
+  assert.equal(expandRule(at('10:00', '2026-03-15'), { freq: 'yearly' }, TZ, at('00:00', '2026-01-01'), at('00:00', '2029-01-01')).length, 3);
+});
