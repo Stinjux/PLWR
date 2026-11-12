@@ -86,19 +86,25 @@ export function RecurrenceEditor({ value, onChange, startLocal }: { value: Rec; 
   const pos = posOf(d);
   return (
     <div className="stack" style={{ gap: 8 }} data-testid="recurrence">
-      <label className="field">
-        Répétition
-        <select className="input" value={value.repeat} onChange={(e) => set({ repeat: e.target.value as Rec['repeat'] })} aria-label="Répétition">
-          <option value="none">Aucune</option>
-          <option value="daily">Quotidienne</option>
-          <option value="weekdays">Jours ouvrables (lun.–ven.)</option>
-          <option value="weekly">Hebdomadaire</option>
-          <option value="monthly">Mensuelle</option>
-          <option value="yearly">Annuelle</option>
-        </select>
-      </label>
+      <div className="field-label">Répétition</div>
+      <div className="row wrap" role="radiogroup" aria-label="Répétition" style={{ gap: 6 }}>
+        {(
+          [
+            ['none', 'Une seule fois'],
+            ['daily', 'Chaque jour'],
+            ['weekdays', 'Lun. au ven.'],
+            ['weekly', 'Chaque semaine'],
+            ['monthly', 'Chaque mois'],
+            ['yearly', 'Chaque année'],
+          ] as [Rec['repeat'], string][]
+        ).map(([v, l]) => (
+          <button key={v} type="button" role="radio" aria-checked={value.repeat === v} className={`pill${value.repeat === v ? ' on' : ''}`} onClick={() => set({ repeat: v })}>
+            {l}
+          </button>
+        ))}
+      </div>
       {value.repeat !== 'none' && (
-        <div className="card" style={{ boxShadow: 'none', padding: 12 }}>
+        <div className="rec-box">
           {value.repeat !== 'weekdays' && (
             <label className="row small" style={{ marginBottom: 8 }}>
               Tous les
@@ -114,8 +120,7 @@ export function RecurrenceEditor({ value, onChange, startLocal }: { value: Rec; 
                   <button
                     key={i}
                     type="button"
-                    className="chip"
-                    style={on ? { background: 'var(--primary)', color: 'var(--primary-ink)' } : undefined}
+                    className={`day-chip${on ? ' on' : ''}`}
                     aria-pressed={on}
                     aria-label={DAY_NAMES[i]}
                     onClick={() => set({ byDay: on ? value.byDay.filter((y) => y !== i + 1) : [...value.byDay, i + 1] })}
@@ -157,7 +162,7 @@ export function RecurrenceEditor({ value, onChange, startLocal }: { value: Rec; 
               occurrences
             </label>
           )}
-          <div className="small" style={{ marginTop: 10, color: 'var(--primary)', fontWeight: 600 }} data-testid="recurrence-summary">
+          <div className="small" style={{ marginTop: 10, color: 'var(--link)', fontWeight: 600 }} data-testid="recurrence-summary">
             {recSummary(value, startLocal)}
           </div>
         </div>

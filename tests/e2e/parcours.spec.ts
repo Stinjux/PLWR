@@ -143,7 +143,7 @@ test('5 et 6. Import d’une capture : correction, seules les lignes confirmées
   await expect(page.getByText('2 ligne(s) confirmée(s)')).toBeVisible();
   await page.getByRole('button', { name: 'Fermer' }).click();
 
-  await page.getByRole('button', { name: 'Transactions' }).click();
+  await page.getByRole('button', { name: 'Dépenses', exact: true }).click();
   const txs = page.getByTestId('tx-row');
   await expect(txs.filter({ hasText: 'SHELL' })).toHaveCount(1);
   await expect(txs.filter({ hasText: 'IGA EXTRA' })).toContainText(new RegExp(`60,00${S}\\$`));
@@ -161,7 +161,7 @@ test('5 et 6. Import d’une capture : correction, seules les lignes confirmées
   await page.getByRole('button', { name: 'Ne pas enregistrer' }).click();
   await page.getByRole('button', { name: 'Fermer' }).click();
   await page.reload();
-  await page.getByRole('button', { name: 'Transactions' }).click();
+  await page.getByRole('button', { name: 'Dépenses', exact: true }).click();
   await expect(page.getByTestId('tx-row').filter({ hasText: 'SHELL' })).toHaveCount(1);
 
   // 6b. Double pression sur Confirmer dans le chatbot : une seule transaction
@@ -184,7 +184,7 @@ test('5 et 6. Import d’une capture : correction, seules les lignes confirmées
   expect(ids[0]).toBe(ids[1]);
   await page.getByRole('button', { name: 'Fermer' }).click();
   await nav(page, 'Budget');
-  await page.getByRole('button', { name: 'Transactions' }).click();
+  await page.getByRole('button', { name: 'Dépenses', exact: true }).click();
   await expect(page.getByTestId('tx-row').filter({ hasText: 'Subway' })).toHaveCount(1);
   await expect(page.getByTestId('tx-row').filter({ hasText: 'Pizza Pizza' })).toHaveCount(1);
 });
@@ -205,7 +205,7 @@ test('7. Erreur de lecture simulée : la saisie manuelle permet de terminer', as
   await card.getByRole('button', { name: 'Confirmer' }).click();
   await expect(card).toContainText('Confirmée');
   await page.getByRole('button', { name: 'Fermer' }).click();
-  await page.getByRole('button', { name: 'Transactions' }).click();
+  await page.getByRole('button', { name: 'Dépenses', exact: true }).click();
   await expect(page.getByTestId('tx-row').filter({ hasText: 'Pharmaprix' })).toHaveCount(1);
 
   // Image illisible envoyée dans le chatbot (sans simulation) : saisie manuelle proposée
@@ -290,10 +290,10 @@ test('Agenda : cliquer-glisser une plage (comme Outlook) et régler la récurren
   await expect(page.getByTestId('computed-end')).toHaveText('Fin : 08h30');
   await page.getByLabel('Titre', { exact: true }).fill('Lecture du matin');
   // Récurrence mensuelle « le Ne jour » puis tous les 2 jours, 5 fois
-  await page.getByLabel('Répétition').selectOption('monthly');
+  await page.getByRole('radiogroup', { name: 'Répétition' }).getByRole('radio', { name: 'Chaque mois' }).click();
   await page.getByRole('button', { name: /^Le (1er|2e|3e|4e|dernier) / }).click();
   await expect(page.getByTestId('recurrence-summary')).toContainText(/Chaque mois le (1er|2e|3e|4e|dernier) \w+ à 07h00/);
-  await page.getByLabel('Répétition').selectOption('daily');
+  await page.getByRole('radiogroup', { name: 'Répétition' }).getByRole('radio', { name: 'Chaque jour' }).click();
   await page.getByLabel('Intervalle').fill('2');
   await page.getByRole('button', { name: 'Après…' }).click();
   await page.getByLabel('Nombre d’occurrences').fill('5');

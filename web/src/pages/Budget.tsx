@@ -3,10 +3,10 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { DateTime } from 'luxon';
 import { api } from '../lib/api';
-import { centsToInput, dayLabel, money, monthLabel, parseMoney, todayIso } from '../lib/format';
+import { TZ, centsToInput, dayLabel, money, monthLabel, parseMoney, todayIso } from '../lib/format';
 import { imageForm } from '../lib/image';
 import { useApp } from '../App';
-import { Icon, Progress, Seg, Sheet, useToast } from '../components/ui';
+import { Icon, Progress, Ring, Seg, Sheet, useToast } from '../components/ui';
 import { useCategories } from '../components/DraftCard';
 
 type View = 'perso' | 'mondaix' | 'all';
@@ -14,14 +14,16 @@ type View = 'perso' | 'mondaix' | 'all';
 export function Budget() {
   const { openChat, openPending } = useApp();
   const toast = useToast();
+  const qc = useQueryClient();
   const [params, setParams] = useSearchParams();
   const [month, setMonth] = useState(todayIso().slice(0, 7));
   const [view, setView] = useState<View>((params.get('vue') as View) || 'all');
-  const tab = params.get('tab') || 'categories';
+  const tab = params.get('tab') || 'transactions';
   const [envelope, setEnvelope] = useState<any | null>(null);
   const [txEdit, setTxEdit] = useState<any | null>(null);
   const [newTx, setNewTx] = useState<'expense' | 'income' | null>(null);
   const [recEdit, setRecEdit] = useState<any | null>(null);
+  const [confirmDel, setConfirmDel] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const camRef = useRef<HTMLInputElement>(null);
@@ -49,87 +51,70 @@ export function Budget() {
     setParams(params, { replace: true });
   };
   const shiftMonth = (n: number) => setMonth(DateTime.fromISO(month + '-01').plus({ months: n }).toFormat('yyyy-LL'));
+  async function remove(t: any) {
+    await api.del(`/api/transactions/${t.id}`);
+    setConfirmDel(null);
+    toast(`${t.merchant || 'Dépense'} supprimée`);
+    qc.invalidateQueries();
+  }
+
+  // Dépenses regroupées par jour
+  const groups: [string, any[]][] = [];
+  for (const t of txs.data || []) {
+    const g = groups.find(([d]) => d === t.date);
+    if (g) g[1].push(t);
+    else groups.push([t.date, [t]]);
+  }
 
   return (
     <>
       <div className="page-head">
-        <h1>Budget</h1>
-        <div className="row">
-          <button className="icon-btn" onClick={() => shiftMonth(-1)} aria-label="Mois précédent">
-            <Icon.chevronL />
-          </button>
-          <strong>{monthLabel(month)}</strong>
-          <button className="icon-btn" onClick={() => shiftMonth(1)} aria-label="Mois suivant">
-            <Icon.chevronR />
-          </button>
+        <div>
+          <div className="eyebrow">Mes finances</div>
+          <h1>Budget</h1>
         </div>
       </div>
-      <Seg
-        full
-        label="Vue du budget"
-        value={view}
-        options={[
-          ['perso', 'Personnel'],
-          ['mondaix', 'MONDAIX'],
-          ['all', 'Combiné'],
-        ]}
-        onChange={setView}
-      />
 
-      {s && (
-        <section className="card" style={{ marginTop: 12 }}>
-          <div className="stats">
-            <div className="stat">
-              <span className="tiny muted">Prévu</span>
-              <span className="v">{money(s.totals.planned)}</span>
-            </div>
-            <div className="stat">
-              <span className="tiny muted">Dépensé</span>
-              <span className="v" data-testid="total-spent">{money(s.totals.spent)}</span>
-            </div>
-            <div className="stat">
-              <span className="tiny muted">Reste</span>
-              <span className="v" style={{ color: s.totals.remaining < 0 ? 'var(--danger)' : undefined }}>
-                {money(s.totals.remaining)}
-              </span>
-            </div>
-          </div>
-          <Progress percent={s.totals.planned ? (s.totals.spent / s.totals.planned) * 100 : 0} tone={s.totals.spent > s.totals.planned ? 'over' : undefined} />
-          <div className="row between small" style={{ marginTop: 8 }}>
-            <span className="muted">
-              Revenus : <strong>{money(s.totals.income)}</strong> / {money(s.totals.incomePlanned)} prévus
-            </span>
-          </div>
-        </section>
-      )}
+      {s && <BudgetHero s={s} month={month} onShift={shiftMonth} />}
 
-      <div className="quick-actions" style={{ marginTop: 12 }}>
-        <button className="btn primary" onClick={openChat}>
-          <Icon.chat /> Dépense
+      <div className="budget-tools">
+        <Seg
+          full
+          label="Vue du budget"
+          value={view}
+          options={[
+            ['perso', 'Personnel'],
+            ['mondaix', 'MONDAIX'],
+            ['all', 'Combiné'],
+          ]}
+          onChange={setView}
+        />
+      </div>
+
+      <QuickExpense onAdded={() => qc.invalidateQueries()} />
+
+      <div className="tool-row">
+        <button className="tool" onClick={openChat}>
+          <Icon.chat /> <span>Discuter</span>
         </button>
-        <button className="btn" onClick={() => fileRef.current?.click()} disabled={uploading} data-testid="import-button">
-          <Icon.upload /> {uploading ? 'Lecture…' : 'Importer'}
+        <button className="tool" onClick={() => fileRef.current?.click()} disabled={uploading} data-testid="import-button">
+          <Icon.upload /> <span>{uploading ? 'Lecture…' : 'Importer'}</span>
         </button>
-        <button className="btn" onClick={() => camRef.current?.click()} disabled={uploading}>
-          <Icon.camera /> Photo
+        <button className="tool" onClick={() => camRef.current?.click()} disabled={uploading}>
+          <Icon.camera /> <span>Photo</span>
+        </button>
+        <button className="tool" onClick={() => setNewTx('income')}>
+          <Icon.plus /> <span>Revenu</span>
+        </button>
+        <button className="tool" onClick={() => openPending()}>
+          <Icon.check /> <span>À valider{s?.pendingDrafts ? ` (${s.pendingDrafts})` : ''}</span>
         </button>
       </div>
       <input ref={fileRef} type="file" accept="image/*" hidden data-testid="budget-file" onChange={(e) => (upload(e.target.files?.[0]), (e.target.value = ''))} />
       <input ref={camRef} type="file" accept="image/*" capture="environment" hidden onChange={(e) => (upload(e.target.files?.[0]), (e.target.value = ''))} />
-      <div className="row wrap" style={{ marginTop: 8 }}>
-        <button className="btn small" onClick={() => openPending()}>
-          À valider ({s?.pendingDrafts ?? 0})
-        </button>
-        <button className="btn small" onClick={() => setNewTx('income')}>
-          + Revenu
-        </button>
-        <button className="btn small" onClick={() => setNewTx('expense')}>
-          + Saisie détaillée
-        </button>
-      </div>
 
       {payday.data?.configured && (
-        <section className="card" style={{ marginTop: 12 }}>
+        <section className="card soft" style={{ marginTop: 12 }}>
           <div className="row between">
             <h3 style={{ margin: 0 }}>Jusqu’à la prochaine paie</h3>
             <span className="tiny muted">{dayLabel(payday.data.payday)}</span>
@@ -142,14 +127,14 @@ export function Budget() {
         </section>
       )}
 
-      <div style={{ margin: '16px 0 8px' }}>
+      <div style={{ margin: '18px 0 10px' }}>
         <Seg
           full
           label="Section"
           value={tab}
           options={[
-            ['categories', 'Catégories'],
-            ['transactions', 'Transactions'],
+            ['transactions', 'Dépenses'],
+            ['categories', 'Enveloppes'],
             ['recurrents', 'Récurrents'],
           ]}
           onChange={setTab}
@@ -158,15 +143,19 @@ export function Budget() {
 
       {tab === 'categories' && s && (
         <section className="card">
+          <p className="tiny muted" style={{ margin: '0 0 8px' }}>
+            Touche une enveloppe pour ajuster son montant.
+          </p>
           <ul className="list" data-testid="categories">
             {s.categories.map((c: any) => {
               const pct = c.planned ? (c.spent / c.planned) * 100 : c.spent ? 100 : 0;
               return (
-                <li key={c.id} className="clickable" onClick={() => setEnvelope(c)} data-testid="category-row" data-label={c.label} data-budget={c.budgetKey}>
-                  <div className="grow">
+                <li key={c.id} className="clickable envelope-row" onClick={() => setEnvelope(c)} data-testid="category-row" data-label={c.label} data-budget={c.budgetKey}>
+                  <CategoryTile label={c.label} />
+                  <div className="grow" style={{ minWidth: 0 }}>
                     <div className="row between">
-                      <span className="small" style={{ fontWeight: 600 }}>
-                        {c.label}
+                      <span className="small ellipsis" style={{ fontWeight: 600 }}>
+                        {c.name || c.label}
                         {view === 'all' && <span className="tiny muted"> · {c.budgetName}</span>}
                       </span>
                       <span className="tiny" data-testid="category-remaining" style={{ color: c.remaining < 0 ? 'var(--danger)' : 'var(--muted)' }}>
@@ -175,6 +164,9 @@ export function Budget() {
                     </div>
                     <Progress percent={pct} tone={pct > 100 ? 'over' : pct > 85 ? 'warn' : undefined} />
                   </div>
+                  <button className="icon-btn sm" aria-label={`Ajuster l’enveloppe ${c.label}`} onClick={(e) => (e.stopPropagation(), setEnvelope(c))}>
+                    <Icon.edit />
+                  </button>
                 </li>
               );
             })}
@@ -183,30 +175,67 @@ export function Budget() {
       )}
 
       {tab === 'transactions' && (
-        <section className="card">
-          {txs.data?.length === 0 && <div className="empty">Aucune transaction ce mois-ci.</div>}
-          <ul className="list" data-testid="transactions">
-            {txs.data?.map((t) => (
-              <li key={t.id} className="clickable" onClick={() => setTxEdit(t)} data-testid="tx-row" data-merchant={t.merchant}>
-                <div className="grow">
-                  <div className="row between">
-                    <span style={{ fontWeight: 600 }} className="ellipsis">
-                      {t.merchant || 'Sans commerçant'}
-                    </span>
-                    <span style={{ fontWeight: 700, color: t.type === 'expense' ? undefined : 'var(--ok)' }}>
-                      {t.type === 'expense' ? '' : '+'}
-                      {money(t.amountCents)}
-                    </span>
-                  </div>
-                  <div className="tiny muted">
-                    {dayLabel(t.date)} · {t.splits.map((x: any) => x.label).join(' + ')} · {t.budgetKeys.map((k: string) => (k === 'mondaix' ? 'MONDAIX' : 'Personnel')).join(' + ')}
-                    {t.type === 'refund' ? ' · remboursement' : ''}
-                    {t.refundedCents ? ` · remboursé ${money(t.refundedCents)}` : ''}
-                  </div>
+        <section className="card tx-card">
+          {txs.data?.length === 0 && <div className="empty">Aucune dépense ce mois-ci. Écris-en une ci-dessus.</div>}
+          <div data-testid="transactions">
+            {groups.map(([date, list]) => (
+              <div key={date} className="tx-group">
+                <div className="tx-day">
+                  <span>{dayLabel(date)}</span>
+                  <span>{money(list.filter((t) => t.type === 'expense').reduce((a, t) => a + t.amountCents, 0))}</span>
                 </div>
-              </li>
+                <ul className="list">
+                  {list.map((t) =>
+                    confirmDel === t.id ? (
+                      <li key={t.id} className="tx-confirm" data-testid="tx-row" data-merchant={t.merchant}>
+                        <span className="grow small">
+                          Supprimer <strong>{t.merchant || 'cette dépense'}</strong> ({money(t.amountCents)}) ?
+                        </span>
+                        <button className="btn small danger-solid" onClick={() => remove(t)}>
+                          Supprimer
+                        </button>
+                        <button className="btn small ghost" onClick={() => setConfirmDel(null)}>
+                          Annuler
+                        </button>
+                      </li>
+                    ) : (
+                      <li key={t.id} className="tx-row" data-testid="tx-row" data-merchant={t.merchant}>
+                        <CategoryTile label={t.splits[0]?.label || ''} />
+                        <button className="tx-main" onClick={() => setTxEdit(t)}>
+                          <span className="row between" style={{ gap: 8 }}>
+                            <span className="ellipsis" style={{ fontWeight: 600 }}>
+                              {t.merchant || 'Sans commerçant'}
+                            </span>
+                            <span className="tx-amount" style={{ color: t.type === 'expense' ? undefined : 'var(--ok)' }}>
+                              {t.type === 'expense' ? '' : '+'}
+                              {money(t.amountCents)}
+                            </span>
+                          </span>
+                          <span className="tiny muted ellipsis block">
+                            {t.splits.map((x: any) => x.label.split(' / ').pop()).join(' + ')}
+                            {view === 'all' ? ` · ${t.budgetKeys.map((k: string) => (k === 'mondaix' ? 'MONDAIX' : 'Personnel')).join(' + ')}` : ''}
+                            {t.type === 'refund' ? ' · remboursement' : ''}
+                            {t.refundedCents ? ` · remboursé ${money(t.refundedCents)}` : ''}
+                          </span>
+                        </button>
+                        <span className="tx-actions">
+                          <button className="icon-btn sm" aria-label={`Modifier ${t.merchant || 'la dépense'}`} onClick={() => setTxEdit(t)}>
+                            <Icon.edit />
+                          </button>
+                          <button className="icon-btn sm danger" aria-label={`Supprimer ${t.merchant || 'la dépense'}`} onClick={() => setConfirmDel(t.id)}>
+                            <Icon.trash />
+                          </button>
+                        </span>
+                      </li>
+                    ),
+                  )}
+                </ul>
+              </div>
             ))}
-          </ul>
+          </div>
+          <button className="btn small ghost" style={{ marginTop: 8 }} onClick={() => setNewTx('expense')}>
+            + Saisie détaillée (plusieurs catégories)
+          </button>
         </section>
       )}
 
@@ -231,6 +260,176 @@ export function Budget() {
       {newTx && <TransactionEditor tx={{ type: newTx, date: todayIso(), merchant: '', amountCents: null, splits: [] }} onClose={() => setNewTx(null)} />}
       {recEdit && <RecurringEditor r={recEdit} onClose={() => setRecEdit(null)} />}
     </>
+  );
+}
+
+const GROUP_ICON: Record<string, keyof typeof Icon> = {
+  Logement: 'home', Alimentation: 'cart', Transport: 'car', Santé: 'heart', Loisirs: 'film', Formation: 'book', Achats: 'bag', Divers: 'dots',
+  Revenus: 'wallet', Assurances: 'shield', Famille: 'users', Dettes: 'card', Produits: 'box', Marketing: 'megaphone', Outils: 'briefcase', Logistique: 'truck', Administration: 'briefcase',
+};
+const GROUP_TONE: Record<string, string> = { Logement: 'blue', Alimentation: 'green', Transport: 'amber', Santé: 'rose', Loisirs: 'plum', Formation: 'teal', Achats: 'amber', Revenus: 'green', Assurances: 'teal', Famille: 'rose', Dettes: 'rose' };
+
+/** Pastille d'icône selon le groupe de la catégorie (« Alimentation / Épicerie » → panier). */
+export function CategoryTile({ label }: { label: string }) {
+  const grp = (label || '').split(' / ')[0];
+  const I = Icon[GROUP_ICON[grp] || 'dots'];
+  return (
+    <span className={`cat-tile pc-${GROUP_TONE[grp] || 'blue'}`} aria-hidden="true">
+      <I />
+    </span>
+  );
+}
+
+/** Fenêtre du budget : ce qui reste, jauge, rythme par jour, revenus. */
+function BudgetHero({ s, month, onShift }: { s: any; month: string; onShift: (n: number) => void }) {
+  const { planned, spent, remaining, income, incomePlanned } = s.totals;
+  const pct = planned ? Math.round((spent / planned) * 100) : 0;
+  const now = DateTime.now().setZone(TZ);
+  const isCurrent = now.toFormat('yyyy-LL') === month;
+  const daysLeft = isCurrent ? Math.max(1, Math.round(now.endOf('month').diff(now.startOf('day'), 'days').days)) : 0;
+  const elapsed = isCurrent ? now.day / now.daysInMonth! : 1;
+  const over = remaining < 0;
+  const status = over ? 'Budget dépassé' : !isCurrent ? (DateTime.fromISO(month + '-01') > now ? 'Mois à venir' : 'Mois terminé') : spent / Math.max(1, planned) > elapsed + 0.1 ? 'Rythme un peu rapide' : 'Dans les temps';
+  const tone = over ? 'over' : status === 'Rythme un peu rapide' ? 'warn' : 'ok';
+  return (
+    <section className="hero budget-hero" aria-label="Mon budget du mois" data-testid="budget-hero">
+      <div className="hero-top">
+        <button className="icon-btn" onClick={() => onShift(-1)} aria-label="Mois précédent">
+          <Icon.chevronL />
+        </button>
+        <strong>{monthLabel(month)}</strong>
+        <button className="icon-btn" onClick={() => onShift(1)} aria-label="Mois suivant">
+          <Icon.chevronR />
+        </button>
+      </div>
+      <div className="hero-body">
+        <Ring percent={pct} tone={tone} label={`${pct} %`} sub="dépensé" />
+        <div className="hero-figures">
+          <span className="hero-label">{over ? 'Dépassement' : 'Il te reste'}</span>
+          <span className={`hero-amount${over ? ' over' : ''}`}>{money(Math.abs(remaining))}</span>
+          <span className="small muted">
+            <span data-testid="total-spent">{money(spent)}</span> dépensés sur {money(planned)} prévus
+          </span>
+          <span className={`status-chip ${tone}`}>{status}</span>
+        </div>
+      </div>
+      <div className="hero-foot">
+        {isCurrent && !over && (
+          <div>
+            <span className="tiny muted block">Par jour jusqu’à la fin du mois</span>
+            <strong>≈ {money(Math.floor(remaining / daysLeft))}</strong> <span className="tiny muted">· {daysLeft} j</span>
+          </div>
+        )}
+        <div>
+          <span className="tiny muted block">Revenus du mois</span>
+          <strong>{money(income)}</strong> <span className="tiny muted">/ {money(incomePlanned)} prévus</span>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+type Preview = { amountCents: number; merchant: string | null; date: string; dateLabel: string; categoryId: string | null; categoryConfident: boolean; categories: { id: string; label: string }[] };
+
+/** Saisie rapide : une phrase → montant, catégorie, commerçant, date à vérifier → Ajouter. */
+function QuickExpense({ onAdded }: { onAdded: () => void }) {
+  const toast = useToast();
+  const [text, setText] = useState('');
+  const [p, setP] = useState<Preview | null>(null);
+  const [amount, setAmount] = useState('');
+  const [categoryId, setCategoryId] = useState('');
+  const [merchant, setMerchant] = useState('');
+  const [date, setDate] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  async function analyse(e?: React.FormEvent) {
+    e?.preventDefault();
+    if (!text.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await api.post<Preview>('/api/expenses/preview', { text });
+      setP(r);
+      setAmount(centsToInput(r.amountCents));
+      setCategoryId(r.categoryId || '');
+      setMerchant(r.merchant || '');
+      setDate(r.date);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function add() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.post('/api/expenses', { amountCents: parseMoney(amount), categoryId, merchant, date });
+      toast(`Ajouté : ${merchant || 'dépense'} · ${money(parseMoney(amount) || 0)}`);
+      setP(null);
+      setText('');
+      onAdded();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <section className={`quick-expense${p ? ' open' : ''}`} aria-label="Saisie rapide d’une dépense">
+      {!p ? (
+        <form className="qe-bar" onSubmit={analyse}>
+          <Icon.wallet aria-hidden="true" />
+          <label className="sr-only" htmlFor="qe-input">
+            Ajouter une dépense
+          </label>
+          <input id="qe-input" value={text} onChange={(e) => setText(e.target.value)} placeholder="Ajouter une dépense : 12 $ café ce matin…" autoComplete="off" />
+          <button className="btn small primary" disabled={!text.trim() || busy}>
+            {busy ? '…' : 'Analyser'}
+          </button>
+        </form>
+      ) : (
+        <div className="qe-review" data-testid="quick-expense-review">
+          <div className="row between">
+            <strong>Vérifie avant d’ajouter</strong>
+            <button className="icon-btn sm" aria-label="Annuler la saisie" onClick={() => setP(null)}>
+              <Icon.close />
+            </button>
+          </div>
+          <div className="qe-grid">
+            <label className="field">
+              Montant
+              <span className="money-input">
+                <input className="input" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} aria-label="Montant de la dépense" />
+                <span aria-hidden="true">$</span>
+              </span>
+            </label>
+            <label className="field">
+              Catégorie {!p.categoryConfident && <span className="tag-warn">à vérifier</span>}
+              <select className="input" value={categoryId} onChange={(e) => setCategoryId(e.target.value)} aria-label="Catégorie de la dépense">
+                {p.categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              Commerçant
+              <input className="input" value={merchant} onChange={(e) => setMerchant(e.target.value)} placeholder="Facultatif" />
+            </label>
+            <label className="field">
+              Date
+              <input className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            </label>
+          </div>
+          <button className="btn primary block" onClick={add} disabled={busy || !parseMoney(amount) || !categoryId}>
+            Ajouter la dépense
+          </button>
+        </div>
+      )}
+      {error && <div className="error" style={{ marginTop: 6 }}>{error}</div>}
+    </section>
   );
 }
 
@@ -284,12 +483,52 @@ function EnvelopeEditor({ cat, month, onClose }: { cat: any; month: string; onCl
     <Sheet title={cat.label} onClose={onClose} footer={<button className="btn primary block" onClick={save}>Enregistrer l’enveloppe</button>}>
       <div className="stack">
         <div className="small muted">
-          {cat.budgetName} · {monthLabel(month)} · dépensé {money(cat.spent)} · reste {money(cat.remaining)}
+          {cat.budgetName} · {monthLabel(month)} · dépensé {money(cat.spent)}
         </div>
-        <label className="field">
-          Montant prévu ce mois-ci
-          <input className="input" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} aria-label="Montant prévu" />
-        </label>
+        <div className="envelope-adjust">
+          <span className="field-label">Montant prévu ce mois-ci</span>
+          <div className="stepper">
+            {[-50, -10].map((d) => (
+              <button key={d} type="button" className="step-btn" onClick={() => setAmount(centsToInput(Math.max(0, (parseMoney(amount) || 0) + d * 100)))} aria-label={`Retirer ${-d} $`}>
+                {d}
+              </button>
+            ))}
+            <span className="money-input grow">
+              <input className="input lg center" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} aria-label="Montant prévu" />
+              <span aria-hidden="true">$</span>
+            </span>
+            {[10, 50].map((d) => (
+              <button key={d} type="button" className="step-btn" onClick={() => setAmount(centsToInput((parseMoney(amount) || 0) + d * 100))} aria-label={`Ajouter ${d} $`}>
+                +{d}
+              </button>
+            ))}
+          </div>
+          {(() => {
+            const max = Math.max(1000, Math.ceil(((Math.max(cat.planned, cat.spent) || 0) * 2) / 100 / 100) * 100);
+            const v = Math.round((parseMoney(amount) || 0) / 100);
+            return (
+              <input
+                type="range"
+                className="gauge-range"
+                min={0}
+                max={max}
+                step={5}
+                value={Math.min(v, max)}
+                onChange={(e) => setAmount(centsToInput(Number(e.target.value) * 100))}
+                aria-label="Ajuster le montant prévu"
+                style={{ ['--pct' as any]: `${Math.min(100, (v / max) * 100)}%` }}
+              />
+            );
+          })()}
+          {(() => {
+            const left = (parseMoney(amount) || 0) - cat.spent;
+            return (
+              <div className={`small ${left < 0 ? 'error' : 'muted'}`} data-testid="envelope-left">
+                {left < 0 ? `Dépassé de ${money(-left)} avec ce montant` : `Il restera ${money(left)} dans cette enveloppe`}
+              </div>
+            );
+          })()}
+        </div>
         <label className="row small">
           <input type="checkbox" checked={future} onChange={(e) => setFuture(e.target.checked)} /> Appliquer aussi aux mois suivants
         </label>

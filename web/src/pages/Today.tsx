@@ -4,16 +4,18 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { dayLabel, dt, duration, goalValue, longDate, time } from '../lib/format';
 import { useApp } from '../App';
-import { Check, Icon, Progress, useToast } from '../components/ui';
+import { Check, Icon, Progress, Ring, useToast } from '../components/ui';
 import { ReorganizeDialog } from '../components/ReorganizeDialog';
 import type { Occ } from '../components/EventEditor';
 import { WelcomeCard } from '../components/WelcomeCard';
+import { DayAssistant } from '../components/DayAssistant';
 
 type TodayData = {
   date: string;
   nextEvent: Occ | null;
   priorities: Occ[];
   tasks: Occ[];
+  agenda: Occ[];
   goals: any[];
   pendingDrafts: number;
   overload: { overloaded: boolean; freeMinutes: number; neededMinutes: number; postponed: number };
@@ -45,11 +47,18 @@ export function Today() {
   }
 
   const greeting = new Date().getHours() < 12 ? 'Bon matin' : new Date().getHours() < 18 ? 'Bon après-midi' : 'Bonsoir';
+  // Ma journée : rendez-vous et blocs d'aujourd'hui (par heure), puis les tâches à placer
+  const items: Occ[] = d ? [...d.agenda, ...d.tasks.filter((t) => !d.agenda.some((a) => a.id === t.id))].filter((o) => o.status !== 'cancelled') : [];
+  items.sort((a, b) => (a.start && b.start ? a.start.localeCompare(b.start) : a.start ? -1 : b.start ? 1 : 0));
+  const tasks = d?.tasks || [];
+  const doneTasks = tasks.filter((t) => t.status === 'done').length;
+  const nowIso = new Date().toISOString();
+
   return (
     <>
       <div className="page-head">
         <div>
-          <div className="muted small">{d ? longDate(d.date) : ''}</div>
+          <div className="eyebrow">{d ? longDate(d.date) : ''}</div>
           <h1>
             {greeting}
             {me.user.name ? `, ${me.user.name}` : ''}
@@ -62,17 +71,45 @@ export function Today() {
 
       <WelcomeCard />
 
-      <div className="quick-actions" style={{ marginBottom: 12 }}>
-        <button className="btn" onClick={() => openEditor({ mode: 'new', kind: 'flexible', planDate: d?.date })}>
-          <Icon.check /> Tâche
-        </button>
-        <button className="btn" onClick={() => openEditor({ mode: 'new', kind: 'fixed' })}>
-          <Icon.calendar /> Événement
-        </button>
-        <button className="btn primary" onClick={openChat} data-testid="add-expense">
-          <Icon.wallet /> Dépense
-        </button>
-      </div>
+      {d && (
+        <section className="hero day-hero" aria-label="Ma journée en bref">
+          <div className="hero-body">
+            <Ring percent={tasks.length ? (doneTasks / tasks.length) * 100 : 0} label={`${doneTasks}/${tasks.length}`} sub="tâches" />
+            <div className="hero-figures">
+              <span className="hero-label">Prochain</span>
+              {d.nextEvent ? (
+                <button className="hero-next" onClick={() => openEditor({ mode: 'edit', id: d.nextEvent!.id })}>
+                  <strong>{d.nextEvent.title}</strong>
+                  <span className="small muted block">
+                    {dayLabel(dt(d.nextEvent.start!).toISODate()!)} · {time(d.nextEvent.start)}–{time(d.nextEvent.end)}
+                    {d.nextEvent.location ? ` · ${d.nextEvent.location}` : ''}
+                  </span>
+                </button>
+              ) : (
+                <span className="small muted">Aucun rendez-vous à venir.</span>
+              )}
+              {d.overload.overloaded ? (
+                <span className="status-chip warn" data-testid="overload">
+                  Journée trop pleine : {duration(d.overload.neededMinutes)} pour {duration(d.overload.freeMinutes)} libres
+                </span>
+              ) : (
+                <span className="status-chip ok">{duration(d.overload.freeMinutes)} libres aujourd’hui</span>
+              )}
+            </div>
+          </div>
+          <div className="quick-actions">
+            <button className="btn" onClick={() => openEditor({ mode: 'new', kind: 'flexible', planDate: d?.date })}>
+              <Icon.check /> Tâche
+            </button>
+            <button className="btn" onClick={() => openEditor({ mode: 'new', kind: 'fixed' })}>
+              <Icon.calendar /> Événement
+            </button>
+            <button className="btn primary" onClick={openChat} data-testid="add-expense">
+              <Icon.wallet /> Dépense
+            </button>
+          </div>
+        </section>
+      )}
 
       {q.isLoading && <div className="empty">Chargement…</div>}
       {d && (
@@ -80,26 +117,36 @@ export function Today() {
           <div>
             <section className="card">
               <div className="card-title">
-                <h2>Prochain rendez-vous</h2>
+                <h2>Ma journée</h2>
+                <span className="muted small">
+                  {items.length} élément{items.length > 1 ? 's' : ''}
+                </span>
               </div>
-              {d.nextEvent ? (
-                <button className="row" style={{ all: 'unset', cursor: 'pointer', display: 'flex', gap: 12, width: '100%' }} onClick={() => openEditor({ mode: 'edit', id: d.nextEvent!.id })}>
-                  <div style={{ textAlign: 'center', minWidth: 58 }}>
-                    <div style={{ fontSize: '1.3rem', fontWeight: 800 }}>{time(d.nextEvent.start)}</div>
-                    <div className="tiny muted">{dayLabel(dt(d.nextEvent.start!).toISODate()!)}</div>
-                  </div>
-                  <div className="grow">
-                    <div style={{ fontWeight: 700 }}>{d.nextEvent.title}</div>
-                    <div className="small muted">
-                      {time(d.nextEvent.start)}–{time(d.nextEvent.end)}
-                      {d.nextEvent.location ? ` · ${d.nextEvent.location}` : ''}
-                    </div>
-                  </div>
-                  <span className="chip fixed">Fixe</span>
-                </button>
-              ) : (
-                <div className="empty">Aucun rendez-vous à venir.</div>
-              )}
+              {items.length === 0 && <div className="empty">Rien de prévu aujourd’hui. Ajoute un événement ou demande à l’assistant.</div>}
+              <ul className="timeline-list" data-testid="today-tasks">
+                {items.map((t) => {
+                  const past = t.end && t.end < nowIso;
+                  const current = t.start && t.end && t.start <= nowIso && t.end > nowIso;
+                  return (
+                    <li key={t.id} className={`tl-item ${t.kind}${t.status === 'done' ? ' done' : ''}${current ? ' current' : ''}${past && t.status !== 'done' ? ' past' : ''}`}>
+                      <span className="tl-time">{t.start ? time(t.start) : 'À placer'}</span>
+                      <span className="tl-dot" aria-hidden="true" />
+                      <span className="clickable grow" onClick={() => openEditor({ mode: 'edit', id: t.id })}>
+                        <span className={`tl-title${t.status === 'done' ? ' done-text' : ''}`}>{t.title}</span>
+                        <span className="tiny muted block">
+                          {t.kind === 'fixed' ? 'Rendez-vous' : 'Tâche'} · {duration(t.durationMin)}
+                          {t.location ? ` · ${t.location}` : ''}
+                          {current ? ' · en cours' : ''}
+                        </span>
+                      </span>
+                      {t.kind === 'flexible' && <Check on={t.status === 'done'} label={`Terminer ${t.title}`} onToggle={() => toggleTask(t)} />}
+                    </li>
+                  );
+                })}
+              </ul>
+              <button className="btn block" style={{ marginTop: 12 }} onClick={() => setReorg(true)}>
+                <Icon.shuffle /> Réorganiser ma journée
+              </button>
             </section>
 
             <section className="card">
@@ -110,7 +157,7 @@ export function Today() {
               <ul className="list" data-testid="priorities">
                 {d.priorities.map((t, i) => (
                   <li key={t.id}>
-                    <Check on={t.status === 'done'} label={`Terminer ${t.title}`} onToggle={() => toggleTask(t)} />
+                    <Check on={t.status === 'done'} label={`Terminer ${t.title} (priorité)`} onToggle={() => toggleTask(t)} />
                     <span className="clickable grow" onClick={() => openEditor({ mode: 'edit', id: t.id })}>
                       <span className={t.status === 'done' ? 'done-text' : ''} style={{ fontWeight: 600 }}>
                         {i + 1}. {t.title}
@@ -122,45 +169,10 @@ export function Today() {
                 ))}
               </ul>
             </section>
-
-            {d.overload.overloaded && (
-              <div className="banner" style={{ marginTop: 12 }} data-testid="overload">
-                <span className="grow small">
-                  Ta journée déborde : {duration(d.overload.neededMinutes)} de tâches pour {duration(d.overload.freeMinutes)} libres.
-                </span>
-                <button className="btn small" onClick={() => setReorg(true)}>
-                  Choisir quoi déplacer
-                </button>
-              </div>
-            )}
-            <button className="btn block" style={{ marginTop: 12 }} onClick={() => setReorg(true)}>
-              <Icon.shuffle /> Réorganiser ma journée
-            </button>
           </div>
 
           <div>
-            <section className="card">
-              <div className="card-title">
-                <h2>Tâches d’aujourd’hui</h2>
-                <span className="muted small">{d.tasks.filter((t) => t.status === 'done').length}/{d.tasks.length}</span>
-              </div>
-              {d.tasks.length === 0 && <div className="empty">Rien de prévu.</div>}
-              <ul className="list" data-testid="today-tasks">
-                {d.tasks.map((t) => (
-                  <li key={t.id}>
-                    <Check on={t.status === 'done'} label={`Terminer ${t.title}`} onToggle={() => toggleTask(t)} />
-                    <span className="clickable grow" onClick={() => openEditor({ mode: 'edit', id: t.id })}>
-                      <span className={t.status === 'done' ? 'done-text' : ''}>{t.title}</span>
-                      <div className="tiny muted">
-                        {t.start ? `${time(t.start)}–${time(t.end)}` : 'À placer'} · {duration(t.durationMin)}
-                        {t.dueAt ? ` · échéance ${time(t.dueAt)}` : ''}
-                      </div>
-                    </span>
-                    <span className={`chip ${t.priority === 1 ? 'warn' : ''}`}>{t.priority === 1 ? 'Haute' : t.priority === 3 ? 'Basse' : 'Moy.'}</span>
-                  </li>
-                ))}
-              </ul>
-            </section>
+            <DayAssistant />
 
             <section className="card">
               <div className="card-title">
@@ -192,6 +204,7 @@ export function Today() {
                     </div>
                   </li>
                 ))}
+                {d.goals.length === 0 && <li className="small muted">Aucun objectif pour l’instant.</li>}
               </ul>
             </section>
 

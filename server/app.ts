@@ -111,7 +111,9 @@ import {
   onboardingEvent,
   onboardingGoal,
   previewExpense,
+  saveExpense,
 } from './services/onboarding.ts';
+import { applyProposal, assistantReply, dayItems, daySummary, type Proposal } from './services/dayAssistant.ts';
 import { CLIENT_EVENTS, adoptionMetrics, touch, track, trackOnce, useful } from './services/analytics.ts';
 import { interpretGoal } from './services/goalInterpreter.ts';
 import { formatMoney } from './time.ts';
@@ -280,6 +282,8 @@ const USEFUL: [RegExp, string][] = [
   [/^\/api\/recurring$/, 'recurring'],
   [/^\/api\/onboarding\/expenses$/, 'recurring'],
   [/^\/api\/onboarding\/savings$/, 'goal'],
+  [/^\/api\/expenses$/, 'expense'],
+  [/^\/api\/assistant\/apply$/, 'replan'],
 ];
 api.use('*', async (c, next) => {
   await next();
@@ -352,6 +356,27 @@ api.post('/onboarding/expense', async (c) => c.json(confirmExpense(U(c), await b
 api.post('/onboarding/welcome-seen', (c) => {
   track(U(c).id, 'welcome_dismissed');
   return c.json(markWelcomeSeen(U(c).id));
+});
+
+// ---------- Saisie rapide d'une dépense (Budget) ----------
+api.post('/expenses/preview', async (c) => c.json(previewExpense(U(c), (await body<{ text: string }>(c)).text)));
+api.post('/expenses', async (c) => c.json(saveExpense(U(c), await body(c)), 201));
+
+// ---------- Assistant de la journée ----------
+api.get('/assistant/day', (c) => {
+  const u = U(c);
+  return c.json({ ...dayItems(u), summary: daySummary(u) });
+});
+api.post('/assistant', async (c) => {
+  const b = await body<{ message: string; history?: { role: 'user' | 'assistant'; text: string }[] }>(c);
+  return c.json(await assistantReply(U(c), b.message, Array.isArray(b.history) ? b.history : []));
+});
+api.post('/assistant/apply', async (c) => {
+  const u = U(c);
+  const p = (await body<{ proposal: Proposal }>(c)).proposal;
+  if (!p || !['complete', 'move', 'postpone', 'plan'].includes(p.type)) throw new HTTPException(400, { message: 'Proposition invalide' });
+  const message = applyProposal(u, p);
+  return c.json({ ok: true, message, summary: daySummary(u) });
 });
 
 /** Événements envoyés par l'interface (liste fermée). */
