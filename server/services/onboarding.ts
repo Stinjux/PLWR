@@ -223,8 +223,14 @@ export function onboardingEvent(user: User, b: any) {
   const title = String(b.title || '').trim().slice(0, 120);
   if (!title) throw new Error('Donne un titre à ton événement');
   if (!b.start || Number.isNaN(Date.parse(b.start))) throw new Error('Choisis un jour et une heure');
-  const occ = createEvent(user.id, { title, kind: 'fixed', start: b.start, durationMin: Math.min(600, Math.max(15, Number(b.durationMin) || 60)), reminders: [] });
-  recordFirstAction(user, { kind: 'event', ref: occ.id, label: `${title} · ${whenLabel(occ.start!, user.timezone)}`, when: occ.start });
+  const rrule = ['daily', 'weekly', 'weekdays'].includes(b.repeat)
+    ? b.repeat === 'weekdays'
+      ? { freq: 'weekly' as const, byDay: [1, 2, 3, 4, 5] }
+      : { freq: b.repeat as 'daily' | 'weekly' }
+    : null;
+  const occ = createEvent(user.id, { title, kind: 'fixed', start: b.start, durationMin: Math.min(600, Math.max(15, Number(b.durationMin) || 60)), reminders: [], rrule });
+  const repeatLabel = b.repeat === 'daily' ? ', chaque jour' : b.repeat === 'weekly' ? ', chaque semaine' : b.repeat === 'weekdays' ? ', du lundi au vendredi' : '';
+  recordFirstAction(user, { kind: 'event', ref: occ.id, label: `${title} · ${whenLabel(occ.start!, user.timezone)}${repeatLabel}`, when: occ.start });
   return occ;
 }
 
@@ -275,7 +281,8 @@ export function previewExpense(user: User, text: string) {
   };
 }
 
-export function confirmExpense(user: User, b: any) {
+/** Enregistre une dépense (saisie rapide du Budget ou accueil). */
+export function saveExpense(user: User, b: any): { id: string; merchant: string; amountCents: number } {
   const amountCents = Math.round(Number(b.amountCents));
   const date = /^\d{4}-\d{2}-\d{2}$/.test(b.date || '') ? b.date : DateTime.now().setZone(user.timezone).toISODate()!;
   const merchant = String(b.merchant || '').trim().slice(0, 80) || 'Dépense';
@@ -283,8 +290,13 @@ export function confirmExpense(user: User, b: any) {
   if (!b.categoryId) throw new Error('Choisis une catégorie');
   const id = insertTransaction(user.id, { date, merchant, amountCents, type: 'expense', splits: [{ categoryId: b.categoryId, amountCents }], source: 'accueil' });
   if (b.merchant) learnMerchant(user.id, merchant, b.categoryId);
-  recordFirstAction(user, { kind: 'expense', ref: id, label: `${merchant} · ${formatMoney(amountCents)}`, when: null });
-  return { id };
+  return { id, merchant, amountCents };
+}
+
+export function confirmExpense(user: User, b: any) {
+  const r = saveExpense(user, b);
+  recordFirstAction(user, { kind: 'expense', ref: r.id, label: `${r.merchant} · ${formatMoney(r.amountCents)}`, when: null });
+  return { id: r.id };
 }
 
 export function markWelcomeSeen(userId: string) {

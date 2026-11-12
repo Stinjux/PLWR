@@ -37,6 +37,22 @@ export const Icon = {
   link: P('M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1|M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1'),
   copy: P('M9 9h11v11H9z|M5 15V4h11'),
   lock: P('M6 11h12v9H6z|M8.5 11V8a3.5 3.5 0 0 1 7 0v3'),
+  home: P('M4 11l8-6 8 6|M6 9.5V20h12V9.5|M10 20v-5h4v5'),
+  cart: P('M3 4h2l2.2 10.5h10.6L20 7H6.3|M9 19.5a1 1 0 1 0 0 .01|M17 19.5a1 1 0 1 0 0 .01'),
+  car: P('M5 16V11l2-5h10l2 5v5|M3 16h18v2H3z|M7.5 13.5h.01|M16.5 13.5h.01'),
+  heart: P('M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z'),
+  film: P('M4 5h16v14H4z|M8 5v14|M16 5v14|M4 9h4|M4 15h4|M16 9h4|M16 15h4'),
+  book: P('M5 4h9a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z|M5 17a3 3 0 0 1 3-3h9'),
+  bag: P('M5 8h14l-1 12H6z|M9 8V6a3 3 0 0 1 6 0v2'),
+  dots: P('M6 12h.01|M12 12h.01|M18 12h.01'),
+  shield: P('M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z'),
+  card: P('M3 6h18v12H3z|M3 10h18|M7 15h4'),
+  box: P('M4 7l8-4 8 4v10l-8 4-8-4z|M4 7l8 4 8-4|M12 11v10'),
+  megaphone: P('M4 10v4h3l7 4V6L7 10z|M17 9a4 4 0 0 1 0 6'),
+  briefcase: P('M4 8h16v11H4z|M9 8V5h6v3|M4 13h16'),
+  truck: P('M3 6h11v10H3z|M14 10h4l3 3v3h-7|M7 18.5a1.5 1.5 0 1 0 0 .01|M17 18.5a1.5 1.5 0 1 0 0 .01'),
+  sparkle: P('M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z|M19 16l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7z'),
+  minus: P('M5 12h14'),
 };
 
 export function Sheet({ title, onClose, children, footer, tall, labelledBy }: { title: ReactNode; onClose: () => void; children: ReactNode; footer?: ReactNode; tall?: boolean; labelledBy?: string }) {
@@ -96,6 +112,24 @@ export function Progress({ percent, tone }: { percent: number; tone?: 'over' | '
   return (
     <div className={`progress${tone ? ' ' + tone : ''}`} role="progressbar" aria-valuenow={Math.round(percent)} aria-valuemin={0} aria-valuemax={100}>
       <span style={{ width: `${Math.max(0, Math.min(100, percent))}%` }} />
+    </div>
+  );
+}
+
+/** Jauge circulaire (anneau) : pourcentage au centre. */
+export function Ring({ percent, tone = 'ok', label, sub, size = 112 }: { percent: number; tone?: 'ok' | 'warn' | 'over'; label: string; sub?: string; size?: number }) {
+  const r = 44, c = 2 * Math.PI * r;
+  const p = Math.max(0, Math.min(100, percent));
+  return (
+    <div className={`ring ${tone}`} style={{ width: size, height: size }} role="img" aria-label={`${label}${sub ? ` ${sub}` : ''}`}>
+      <svg viewBox="0 0 100 100" aria-hidden="true">
+        <circle cx="50" cy="50" r={r} className="ring-track" />
+        {p > 0 && <circle cx="50" cy="50" r={r} className="ring-value" strokeDasharray={`${(p / 100) * c} ${c}`} transform="rotate(-90 50 50)" />}
+      </svg>
+      <span className="ring-label">
+        <strong>{label}</strong>
+        {sub && <small>{sub}</small>}
+      </span>
     </div>
   );
 }

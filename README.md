@@ -24,6 +24,7 @@ server/
   services/onboarding.ts accueil (3 parcours, profil) et cloche
   services/goalInterpreter.ts objectif écrit librement → objectif mesurable (Claude, ou règles locales)
   services/analytics.ts mesure de l'adoption (1re action, J+1, J+7, 2e action)
+  services/dayAssistant.ts assistant de la journée (bilan, réorganiser, déplacer, reporter)
   services/planner.ts  « Réorganiser ma journée »
   services/goals.ts    progression, historique semaine/mois
   services/budget.ts   enveloppes, transactions, ventilations, catégorisation, doublons
@@ -193,6 +194,25 @@ Comportement :
 - **Deux agendas** : on peut relier Google et Outlook en même temps, et chacun reçoit ce qui est créé dans PLWR.
 
 **Objectifs** – ponctuels ou récurrents (jour, semaine, mois), à cocher, quantité, durée, montant, échéance et rappel. Un objectif peut être lié à plusieurs blocs ; en terminant un bloc on saisit le résultat réel (ex. 45 min sur 60 prévues). Progression, reste à faire, historique par semaine ou par mois.
+
+**Tableau de bord** :
+- **Ma journée** : tous les rendez-vous, blocs et tâches du jour sur une ligne du temps, avec ce qui est en cours et une case à cocher pour chaque tâche.
+- **Bilan** : un anneau montre les tâches faites, le prochain rendez-vous et le temps libre restant.
+- **Assistant de la journée**, dans le même écran :
+  - il fait le point (« Où j’en suis ? ») ;
+  - il réorganise la journée à partir de maintenant ;
+  - il marque une tâche comme faite (« J’ai fini la course ») ;
+  - il déplace un élément (« déplace l’appel à 15 h ») ou le reporte (« reporte le rapport à demain »).
+  
+  Chaque changement arrive comme une proposition à **Appliquer** ou **Ignorer** : rien n’est modifié sans un geste. Claude répond si une clé est configurée, sinon des règles locales prennent le relais.
+
+**Budget, version claire** :
+- **Panneau du mois** : ce qui reste, un anneau du pourcentage dépensé, le rythme (« dans les temps », « un peu rapide », dépassé), un montant par jour jusqu’à la fin du mois et les revenus.
+- **Saisie rapide** en une phrase, avec montant, catégorie, commerçant et date à vérifier avant d’ajouter.
+- **Dépenses groupées par jour**, chacune avec ✏️ pour modifier et 🗑️ pour supprimer (confirmation dans la ligne).
+- **Enveloppes** ajustables par −50, −10, +10 et +50, ou avec une jauge, avec le reste affiché tout de suite.
+
+**Récurrences** – dans la fiche d’un événement, choix visibles en un toucher : une seule fois, chaque jour, du lundi au vendredi, chaque semaine (jours au choix), chaque mois ou chaque année, avec une fin (jamais, à une date, après N fois). L’accueil propose aussi « chaque semaine ».
 
 **Budget** – enveloppes mensuelles par catégorie (modifiables en cours de mois, ce mois seulement ou aussi les suivants), dépenses confirmées, reste ; revenus ; paiements récurrents (« Payé »/« Reçu » crée la transaction et avance l’échéance, sans doublon) ; vues Personnel, MONDAIX et Combiné. Modifier une transaction confirmée, enregistrer un remboursement (réparti au prorata), ventiler une dépense entre plusieurs catégories (y compris entre personnel et MONDAIX). Bonus : « Jusqu’à la prochaine paie ».
 

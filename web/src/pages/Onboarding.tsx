@@ -130,13 +130,14 @@ function WeekAction({ onDone }: { onDone: () => void }) {
   const [day, setDay] = useState(tomorrow());
   const [time, setTime] = useState('09:00');
   const [duration, setDuration] = useState(60);
+  const [repeat, setRepeat] = useState<'none' | 'weekly' | 'weekdays' | 'daily'>('none');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   async function add() {
     setBusy(true);
     setError(null);
     try {
-      await api.post('/api/onboarding/event', { title, start: toIso(day, time), durationMin: duration });
+      await api.post('/api/onboarding/event', { title, start: toIso(day, time), durationMin: duration, repeat });
       onDone();
     } catch (e) {
       setError((e as Error).message);
@@ -159,6 +160,20 @@ function WeekAction({ onDone }: { onDone: () => void }) {
         ))}
       </div>
       <WhenPicker day={day} time={time} duration={duration} onDay={setDay} onTime={setTime} onDuration={setDuration} />
+      <div className="chip-scroll" role="radiogroup" aria-label="Répétition">
+        {(
+          [
+            ['none', 'Une seule fois'],
+            ['weekly', 'Chaque semaine'],
+            ['weekdays', 'Lun. au ven.'],
+            ['daily', 'Chaque jour'],
+          ] as const
+        ).map(([v, l]) => (
+          <button key={v} type="button" role="radio" aria-checked={repeat === v} className={`pill${repeat === v ? ' on' : ''}`} onClick={() => setRepeat(v)}>
+            {l}
+          </button>
+        ))}
+      </div>
       {error && <div className="error">{error}</div>}
       <button className="btn primary block lg" onClick={add} disabled={!title.trim() || busy}>
         Ajouter à mon agenda
