@@ -85,3 +85,51 @@ test('saisie rapide d’une dépense : aperçu puis enregistrement', async () =>
   assert.equal(txs[0].merchant, 'IGA');
   assert.equal((await call('GET', '/api/me')).data.onboarding.firstAction, null, 'la saisie rapide ne compte pas comme action d’accueil');
 });
+
+test('assistant et objectifs enregistrés : bilan, progrès, bloc planifié', async () => {
+  const r = await req('POST', '/api/auth/register', { email: 'c@exemple.ca', password: 'motdepasse-solide', name: 'Noé', samples: false });
+  const cookie = (r.res.headers.get('set-cookie') || '').split(';')[0];
+  const call = (m: string, u: string, b?: any) => req(m, u, b, cookie);
+
+  let a = (await call('POST', '/api/assistant', { message: 'Mes objectifs ?' })).data;
+  assert.match(a.reply, /pas encore d’objectif/);
+
+  const lire = (await call('POST', '/api/goals', { title: 'Lire 20 min par jour', metric: 'duration', target: 20, unit: 'min', period: 'daily' })).data;
+  const courir = (await call('POST', '/api/goals', { title: 'Courir 3 fois par semaine', metric: 'quantity', target: 3, unit: 'fois', period: 'weekly' })).data;
+  const epargne = (await call('POST', '/api/goals', { title: 'Fonds d’urgence', metric: 'amount', target: 1000, unit: '$', period: 'once' })).data;
+
+  // Bilan des objectifs
+  a = (await call('POST', '/api/assistant', { message: 'Où j’en suis dans mes objectifs ?' })).data;
+  assert.match(a.reply, /0 objectif atteint sur 3/);
+  assert.match(a.reply, /Lire 20 min par jour : 0 min sur 20 min aujourd’hui/);
+
+  // Progrès en minutes, puis appliqué
+  a = (await call('POST', '/api/assistant', { message: 'J’ai lu 25 min' })).data;
+  assert.equal(a.proposals[0].type, 'goal_progress');
+  assert.equal(a.proposals[0].goalId, lire.id);
+  assert.equal(a.proposals[0].value, 25);
+  assert.match((await call('POST', '/api/assistant/apply', { proposal: a.proposals[0] })).data.message, /25 min sur 20 min/);
+
+  // Une séance de plus (quantité) et de l'épargne (montant)
+  a = (await call('POST', '/api/assistant', { message: 'J’ai couru ce matin' })).data;
+  assert.deepEqual([a.proposals[0].goalId, a.proposals[0].value], [courir.id, 1]);
+  await call('POST', '/api/assistant/apply', { proposal: a.proposals[0] });
+  a = (await call('POST', '/api/assistant', { message: 'J’ai mis 150 $ de côté' })).data;
+  assert.deepEqual([a.proposals[0].goalId, a.proposals[0].value], [epargne.id, 150]);
+  await call('POST', '/api/assistant/apply', { proposal: a.proposals[0] });
+  const goals = (await call('GET', '/api/goals')).data;
+  assert.equal(goals.find((g: any) => g.id === courir.id).progress.done, 1);
+  assert.equal(goals.find((g: any) => g.id === epargne.id).progress.done, 150);
+
+  // Bloc planifié lié à l'objectif
+  a = (await call('POST', '/api/assistant', { message: 'Planifie 30 min de lecture demain à 19 h' })).data;
+  assert.equal(a.proposals[0].type, 'goal_block');
+  assert.equal(a.proposals[0].goalId, lire.id);
+  assert.equal(DateTime.fromISO(a.proposals[0].start).setZone('America/Toronto').toFormat('HH:mm'), '19:00');
+  assert.equal((Date.parse(a.proposals[0].end) - Date.parse(a.proposals[0].start)) / 60000, 30);
+  await call('POST', '/api/assistant/apply', { proposal: a.proposals[0] });
+  assert.equal((await call('GET', '/api/goals')).data.find((g: any) => g.id === lire.id).linkedBlocks, 1);
+
+  // Objectif d'une autre personne : refusé
+  assert.equal((await call('POST', '/api/assistant/apply', { proposal: { type: 'goal_progress', goalId: 'inconnu', value: 5 } })).status, 404);
+});

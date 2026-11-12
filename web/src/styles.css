@@ -688,3 +688,8 @@ body { background: radial-gradient(1200px 520px at 50% -260px, #10213f 0%, rgb(1
 /* Correctifs : cloche non flottante, bulles qui ne se tassent pas */
 .top-bar { position: relative; }
 .assistant-log > * { flex-shrink: 0; }
+/* Les colonnes ne s'élargissent jamais à cause d'un contenu qui défile (suggestions, rangées d'outils) */
+.grid-2 { grid-template-columns: minmax(0, 1fr); }
+.grid-2 > * { min-width: 0; }
+@media (min-width: 900px) { .grid-2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+.main { min-width: 0; overflow-x: clip; }

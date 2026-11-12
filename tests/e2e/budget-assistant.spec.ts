@@ -66,3 +66,21 @@ test('tableau de bord : ma journée, assistant (bilan et report à confirmer), �
   await page.getByRole('button', { name: 'Enregistrer' }).click();
   await expect(page.getByText('Événement ajouté')).toBeVisible();
 });
+
+test('assistant : bilan des objectifs enregistrés et progrès noté', async ({ page }) => {
+  await signup(page);
+  await page.evaluate(() =>
+    fetch('/api/goals', { method: 'POST', headers: { 'x-plwr': '1', 'content-type': 'application/json' }, body: JSON.stringify({ title: 'Lire 20 min par jour', metric: 'duration', target: 20, unit: 'min', period: 'daily' }) }),
+  );
+  await page.reload();
+  const assistant = page.getByTestId('assistant');
+  await assistant.getByRole('button', { name: 'Mes objectifs' }).click();
+  await expect(assistant.locator('.bubble.assistant').last()).toContainText('Lire 20 min par jour : 0 min sur 20 min');
+  await assistant.getByLabel('Message à l’assistant').fill('J’ai lu 25 min');
+  await assistant.getByRole('button', { name: 'Envoyer' }).click();
+  const proposal = assistant.getByTestId('proposal').last();
+  await expect(proposal).toContainText('Noter un progrès : Lire 20 min par jour');
+  await proposal.getByRole('button', { name: 'Appliquer' }).click();
+  await expect(proposal).toContainText('Fait');
+  await expect(page.getByTestId('today-goals')).toContainText('25 min / 20 min');
+});
