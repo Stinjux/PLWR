@@ -204,6 +204,11 @@ Comportement :
   - il marque une tâche comme faite (« J’ai fini la course ») ;
   - il déplace un élément (« déplace l’appel à 15 h ») ou le reporte (« reporte le rapport à demain »).
   
+  L’assistant connaît aussi les **objectifs enregistrés** :
+  - il en fait le bilan (« Mes objectifs ») : fait et cible de la période, et l’objectif le plus en retard ;
+  - il note un progrès (« J’ai lu 25 min », « J’ai couru ce matin », « J’ai mis 150 $ de côté ») ;
+  - il réserve un bloc lié à un objectif (« Planifie 30 min de lecture demain à 19 h »).
+
   Chaque changement arrive comme une proposition à **Appliquer** ou **Ignorer** : rien n’est modifié sans un geste. Claude répond si une clé est configurée, sinon des règles locales prennent le relais.
 
 **Budget, version claire** :

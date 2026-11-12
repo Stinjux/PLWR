@@ -9,7 +9,9 @@ type ProposalState = Record<string, 'applied' | 'ignored' | 'busy'>;
 
 const SUGGESTIONS: [string, boolean][] = [
   ['Où j’en suis ?', true],
+  ['Mes objectifs', true],
   ['Réorganise ma journée', true],
+  ['J’ai fait 30 min de ', false],
   ['J’ai fini ', false],
   ['Reporte  à demain', false],
 ];
@@ -92,7 +94,7 @@ export function DayAssistant() {
         </span>
         <div className="grow">
           <h2 id="assistant-title">Assistant de la journée</h2>
-          <span className="tiny muted">Suivi, réorganisation, reports. Tu valides chaque changement.</span>
+          <span className="tiny muted">Ta journée et tes objectifs : suivi, progrès, réorganisation. Tu valides chaque changement.</span>
         </div>
       </div>
 
@@ -151,7 +153,7 @@ export function DayAssistant() {
         <label className="sr-only" htmlFor="assistant-input">
           Message à l’assistant
         </label>
-        <input id="assistant-input" ref={inputRef} value={text} onChange={(e) => setText(e.target.value)} placeholder="Ex. : déplace le dentiste à 15 h" autoComplete="off" />
+        <input id="assistant-input" ref={inputRef} value={text} onChange={(e) => setText(e.target.value)} placeholder="Ex. : j’ai lu 25 min, ou déplace le dentiste à 15 h" autoComplete="off" />
         <button className="send-btn" aria-label="Envoyer" disabled={!text.trim() || busy}>
           <Icon.send />
         </button>

@@ -374,7 +374,7 @@ api.post('/assistant', async (c) => {
 api.post('/assistant/apply', async (c) => {
   const u = U(c);
   const p = (await body<{ proposal: Proposal }>(c)).proposal;
-  if (!p || !['complete', 'move', 'postpone', 'plan'].includes(p.type)) throw new HTTPException(400, { message: 'Proposition invalide' });
+  if (!p || !['complete', 'move', 'postpone', 'plan', 'goal_progress', 'goal_block'].includes(p.type)) throw new HTTPException(400, { message: 'Proposition invalide' });
   const message = applyProposal(u, p);
   return c.json({ ok: true, message, summary: daySummary(u) });
 });
