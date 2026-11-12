@@ -290,6 +290,7 @@ export function Settings() {
 
         {me.isAdmin && <AdoptionCard />}
         {me.isAdmin && <StorageCard />}
+        {me.isAdmin && <AiUsageCard />}
 
         <section className="card">
           <h2>Compte</h2>
@@ -487,6 +488,57 @@ function AdoptionCard() {
       <p className="tiny muted" style={{ margin: 0 }}>
         Entre parenthèses : personnes inscrites depuis assez longtemps pour être comptées. Avec quelques comptes, lis ces chiffres comme des tendances. Ils restent dans PLWR et ne montrent
         jamais le détail d’une personne.
+      </p>
+    </section>
+  );
+}
+
+const FEATURE_LABEL: Record<string, string> = { assistant: 'Assistant de la journée', goal: 'Objectifs écrits', vision: 'Lecture d’images' };
+const fmt = (n: number) => new Intl.NumberFormat('fr-CA').format(n);
+
+/** Consommation de la clé Anthropic ce mois-ci : appels, jetons et coût estimé par fonction. */
+function AiUsageCard() {
+  const q = useQuery({ queryKey: ['admin-ai-usage'], queryFn: () => api.get<any>('/api/admin/ai-usage') });
+  const d = q.data;
+  if (!d) return null;
+  return (
+    <section className="card stack" data-testid="ai-usage-card">
+      <h2 style={{ margin: 0 }}>Utilisation de l’IA ce mois-ci</h2>
+      {d.totalCalls === 0 ? (
+        <p className="small muted" style={{ margin: 0 }}>Aucun appel à Claude ce mois-ci : tout a été traité par les règles locales.</p>
+      ) : (
+        <div className="table-scroll">
+          <table className="metrics">
+            <thead>
+              <tr>
+                <th scope="col">Fonction</th>
+                <th scope="col">Appels</th>
+                <th scope="col">Jetons</th>
+                <th scope="col">Coût estimé</th>
+              </tr>
+            </thead>
+            <tbody>
+              {d.features.map((f: any) => (
+                <tr key={f.feature}>
+                  <th scope="row">{FEATURE_LABEL[f.feature] || f.feature}</th>
+                  <td>{fmt(f.calls)}</td>
+                  <td>{fmt(f.input + f.output)}</td>
+                  <td>{f.costUsd.toFixed(2)} $ US</td>
+                </tr>
+              ))}
+              <tr>
+                <th scope="row">Total</th>
+                <td>{fmt(d.totalCalls)}</td>
+                <td>{fmt(d.totalTokens)}</td>
+                <td>{d.totalCostUsd.toFixed(2)} $ US</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="tiny muted" style={{ margin: 0 }}>
+        Les demandes simples (« j’ai fini… », « reporte… », objectifs chiffrés) sont traitées sans IA. Limite : {d.dailyCallsPerPerson ? `${d.dailyCallsPerPerson} appels par personne et par jour` : 'aucune'}
+        . Modèle texte : {d.textModel} ; images : {d.visionModel}. Coût estimé d’après le tarif public, hors taxes.
       </p>
     </section>
   );

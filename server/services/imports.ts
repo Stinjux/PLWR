@@ -103,7 +103,7 @@ export async function processImport(user: User, file: { bytes: Buffer; mime: str
 
   let result: ExtractionResult;
   try {
-    result = await provider.extract(redacted, { mime: 'image/jpeg', today: today(user.timezone), ocr });
+    result = await provider.extract(redacted, { mime: 'image/jpeg', today: today(user.timezone), ocr, userId: user.id });
   } catch (e: any) {
     const msg = e instanceof VisionError ? e.message : 'Lecture impossible';
     run("UPDATE imports SET status = 'failed', error = ? WHERE id = ?", msg, id);

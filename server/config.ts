@@ -52,6 +52,8 @@ export const config = {
     redactCardNumbers: bool(env.REDACT_CARD_NUMBERS, true),
     maxUploadBytes: Number(env.MAX_UPLOAD_MB || 12) * 1024 * 1024,
     timeoutMs: Number(env.VISION_TIMEOUT_MS || 60000),
+    /** Budget de pixels de l'image envoyée (facturée au pixel) : environ 0,9 mégapixel suffit pour lire un reçu. */
+    maxMegapixels: Math.min(1.15, Math.max(0.3, Number(env.VISION_MAX_MEGAPIXELS || 0.9))),
   },
   images: {
     /** Supprimer l'image dès que toutes ses lignes sont validées ou retirées. */
@@ -63,6 +65,12 @@ export const config = {
     publicKey: clean(env.VAPID_PUBLIC_KEY),
     privateKey: clean(env.VAPID_PRIVATE_KEY),
     subject: clean(env.VAPID_SUBJECT) || 'mailto:admin@example.com',
+  },
+  /** Usage de la clé Anthropic pour l'assistant et les objectifs (la lecture d'images a son propre modèle). */
+  ai: {
+    textModel: clean(env.ANTHROPIC_TEXT_MODEL) || 'claude-opus-5-5',
+    /** Appels par personne et par jour (assistant + objectifs) ; au-delà, règles locales. 0 = sans limite. */
+    dailyCalls: Math.max(0, Number(env.AI_DAILY_CALLS ?? 30)),
   },
   /** Google Agenda. Facultatif : sans ces variables, chaque personne importe ses propres identifiants dans Réglages. */
   google: {

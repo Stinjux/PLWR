@@ -256,7 +256,16 @@ Les échecs d’envoi sont aussi écrits dans les journaux Railway (`[push] éch
 - Par défaut `VISION_PROVIDER=anthropic` : Claude lit l’image (reçu = une transaction au total ; capture bancaire = une ligne par transaction) et renvoie un JSON validé. La requête active le repli automatique du serveur Anthropic (`fallbacks: "default"`) si un modèle refuse.
 - Avant l’envoi : rotation EXIF, suppression des métadonnées, redimensionnement (≤ 2000 px), **OCR local pour repérer les numéros de carte (13 à 19 chiffres) et les masquer en noir**. Le texte renvoyé est aussi filtré. Limite : un numéro très flou ou manuscrit peut échapper à l’OCR local.
 - Images stockées dans `DATA_DIR/uploads/<utilisateur>/` (droits 600), servies uniquement à leur propriétaire avec `Cache-Control: no-store`, supprimées dès que toutes les lignes sont confirmées ou retirées (réglable), purge de sécurité après 72 h.
+- Image envoyée réduite : bordures unies rognées, puis budget de `VISION_MAX_MEGAPIXELS` (0,9 Mpx par défaut, ≈ 1 200 jetons au lieu de ≈ 4 000 pour une photo 2000 × 1500).
 - `VISION_PROVIDER=local` fonctionne sans clé (OCR Tesseract embarqué, français + anglais) mais est moins précis sur les photos de reçus.
+
+## Consommation de la clé Anthropic
+
+- **Règles d’abord** : « j’ai fini… », « reporte… », « déplace… à 15 h », « j’ai fait 30 min de… », le bilan de la journée et les objectifs chiffrés (« lire 20 min par jour ») sont traités localement, sans appel.
+- Claude n’est appelé que pour le reste, en **un seul appel** : contexte compact (codes courts `e1`, `o1` au lieu d’identifiants), 4 derniers messages seulement, consignes courtes, effort `low`. Une même phrase d’objectif n’est interprétée qu’une fois (cache).
+- **Plafond** : `AI_DAILY_CALLS` appels par personne et par jour (30 par défaut, `0` = sans limite) ; au-delà, l’assistant répond avec les règles locales.
+- **Modèle** : `ANTHROPIC_TEXT_MODEL` (défaut `claude-opus-5-5`). `claude-haiku-5-5` coûte environ 40 fois moins par jeton, avec des réponses moins fines.
+- **Suivi** : Réglages → « Utilisation de l’IA ce mois-ci » (administration) : appels, jetons et coût estimé par fonction.
 
 ## Ajouts priorisés après la première version
 

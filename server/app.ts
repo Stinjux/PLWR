@@ -116,6 +116,7 @@ import {
 import { applyProposal, assistantReply, dayItems, daySummary, type Proposal } from './services/dayAssistant.ts';
 import { CLIENT_EVENTS, adoptionMetrics, touch, track, trackOnce, useful } from './services/analytics.ts';
 import { interpretGoal } from './services/goalInterpreter.ts';
+import { usageSummary } from './services/aiUsage.ts';
 import { formatMoney } from './time.ts';
 
 export const app = new Hono();
@@ -315,6 +316,10 @@ api.get('/admin/metrics', (c) => {
   requireAdmin(c);
   return c.json(adoptionMetrics());
 });
+api.get('/admin/ai-usage', (c) => {
+  requireAdmin(c);
+  return c.json(usageSummary());
+});
 api.get('/admin/storage', (c) => {
   requireAdmin(c);
   return c.json({ ...storage, users: userCount(), maxUsers: config.maxUsers, backups: listBackups() });
@@ -349,7 +354,7 @@ api.post('/onboarding/savings', async (c) => c.json(createSavingsGoal(U(c), awai
 api.post('/onboarding/complete', (c) => c.json(completeOnboarding(U(c).id)));
 api.post('/onboarding/path', async (c) => c.json(choosePath(U(c).id, (await body<{ path: string }>(c)).path)));
 api.post('/onboarding/event', async (c) => c.json(onboardingEvent(U(c), await body(c)), 201));
-api.post('/onboarding/goal/interpret', async (c) => c.json(await interpretGoal((await body<{ text: string }>(c)).text, U(c).timezone)));
+api.post('/onboarding/goal/interpret', async (c) => c.json(await interpretGoal((await body<{ text: string }>(c)).text, U(c).timezone, U(c).id)));
 api.post('/onboarding/goal', async (c) => c.json(onboardingGoal(U(c), await body(c)), 201));
 api.post('/onboarding/expense/preview', async (c) => c.json(previewExpense(U(c), (await body<{ text: string }>(c)).text)));
 api.post('/onboarding/expense', async (c) => c.json(confirmExpense(U(c), await body(c)), 201));

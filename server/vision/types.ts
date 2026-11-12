@@ -22,7 +22,7 @@ export type OcrResult = { text: string; lines: OcrLine[]; confidence: number };
 
 export interface VisionProvider {
   name: string;
-  extract(image: Buffer, ctx: { mime: string; today: string; ocr: OcrResult | null }): Promise<ExtractionResult>;
+  extract(image: Buffer, ctx: { mime: string; today: string; ocr: OcrResult | null; userId?: string }): Promise<ExtractionResult>;
 }
 
 export class VisionError extends Error {

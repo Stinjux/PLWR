@@ -3,6 +3,8 @@ import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
 import { z } from 'zod';
 import { DateTime } from 'luxon';
 import { config } from '../config.ts';
+import sharp from 'sharp';
+import { fallbackParams, recordUsage } from '../services/aiUsage.ts';
 import { findAmounts, findDate, findMerchant } from '../services/expenseParser.ts';
 import { type ExtractionResult, type ExtractedTransaction, type VisionProvider, VisionError } from './types.ts';
 
@@ -38,29 +40,54 @@ Règles :
 - Indique dans uncertainFields chaque champ difficile à lire ou deviné.
 - Si l'image ne contient aucune transaction lisible, renvoie readable=false avec une raison courte en français.`;
 
+/**
+ * Une image est facturée au pixel (≈ largeur × hauteur / 750 jetons) : on rogne les bordures unies
+ * puis on réduit à un budget de pixels qui garde un reçu ou une capture lisible.
+ */
+export async function shrinkForModel(image: Buffer, maxMegapixels = config.vision.maxMegapixels): Promise<Buffer> {
+  try {
+    let img = sharp(image);
+    try {
+      const trimmed = await sharp(image).trim({ threshold: 12 }).toBuffer({ resolveWithObject: true });
+      if (trimmed.info.width > 200 && trimmed.info.height > 200) img = sharp(trimmed.data);
+    } catch {
+      /* image sans bordure unie */
+    }
+    const meta = await img.metadata();
+    const w = meta.width || 0, h = meta.height || 0;
+    if (!w || !h) return image;
+    const scale = Math.min(1, Math.sqrt((maxMegapixels * 1_000_000) / (w * h)), 1568 / Math.max(w, h));
+    return await img.resize({ width: Math.max(1, Math.round(w * scale)), withoutEnlargement: true }).jpeg({ quality: 85 }).toBuffer();
+  } catch {
+    return image;
+  }
+}
+
 export const anthropicProvider: VisionProvider = {
   name: 'anthropic',
   async extract(image, ctx) {
     if (!config.vision.anthropicKey) throw new VisionError('config', 'Clé ANTHROPIC_API_KEY manquante sur le serveur');
     const client = new Anthropic({ apiKey: config.vision.anthropicKey, timeout: config.vision.timeoutMs, maxRetries: 1 });
+    const model = config.vision.anthropicModel;
+    const small = await shrinkForModel(image);
     try {
       const response = await client.beta.messages.parse({
-        model: config.vision.anthropicModel,
-        max_tokens: 8000,
-        betas: ['server-side-fallback-2026-07-01'],
-        fallbacks: 'default',
+        model,
+        max_tokens: 6000,
+        ...fallbackParams(model),
         output_config: { effort: 'low', format: betaZodOutputFormat(ResultSchema) },
         system: SYSTEM,
         messages: [
           {
             role: 'user',
             content: [
-              { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: image.toString('base64') } },
+              { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: small.toString('base64') } },
               { type: 'text', text: `Date du jour : ${ctx.today} (fuseau America/Toronto). Extrais les transactions de cette image.` },
             ],
           },
         ],
-      });
+      } as any);
+      recordUsage(ctx.userId || null, 'vision', model, response.usage);
       if (response.stop_reason === 'refusal') throw new VisionError('provider', 'Le fournisseur a refusé de lire cette image');
       if (!response.parsed_output) throw new VisionError('provider', 'Réponse du fournisseur illisible');
       return response.parsed_output as ExtractionResult;

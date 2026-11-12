@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { DateTime } from 'luxon';
 import { config } from '../config.ts';
 import { strip } from './expenseParser.ts';
+import { aiAllowed, fallbackParams, recordUsage } from './aiUsage.ts';
 
 /**
  * Transforme un objectif écrit librement (« courir 3 fois par semaine », « 5 000 $ pour un voyage en juin »)
@@ -25,28 +26,18 @@ export type GoalDraft = {
 };
 
 const GoalSchema = z.object({
-  title: z.string().describe('Titre court et motivant, en français, 60 caractères max (ex. « Courir 3 fois par semaine »)'),
-  kind: z.enum(['financial', 'personal']).describe('financial = argent (épargne, dette, budget) ; personal = le reste'),
-  metric: z
-    .enum(['check', 'quantity', 'duration', 'amount'])
-    .describe('amount = dollars ; duration = minutes ; quantity = nombre de fois ou d’unités ; check = fait / pas fait'),
-  target: z.number().describe('Cible par période (ex. 3 pour 3 fois par semaine, 20 pour 20 min par jour, 5000 pour 5 000 $). Durées en minutes.'),
-  unit: z.string().describe('Unité courte : « $ », « min », « fois », « pages », « km »… ; vide pour check'),
-  period: z.enum(['once', 'daily', 'weekly', 'monthly']).describe('Fréquence de la cible ; once pour un objectif à atteindre une fois'),
-  deadline: z.string().nullable().describe('Date limite YYYY-MM-DD si la personne en indique une (ex. « d’ici juin » → dernier jour de juin), sinon null'),
-  summary: z.string().describe('Une phrase factuelle en français qui résume ce qui sera suivi, sans encouragement'),
-  firstStep: z.object({
-    title: z.string().describe('Première action concrète à planifier cette semaine, en français, 50 caractères max'),
-    durationMin: z.number().describe('Durée réaliste de cette première action, en minutes (15 à 120)'),
-  }),
+  title: z.string().describe('≤ 60 car.'),
+  kind: z.enum(['financial', 'personal']),
+  metric: z.enum(['check', 'quantity', 'duration', 'amount']),
+  target: z.number().describe('par période'),
+  unit: z.string(),
+  period: z.enum(['once', 'daily', 'weekly', 'monthly']),
+  deadline: z.string().nullable().describe('YYYY-MM-DD'),
+  summary: z.string().describe('1 phrase'),
+  firstStep: z.object({ title: z.string().describe('≤ 50 car.'), durationMin: z.number() }),
 });
 
-const SYSTEM = `Tu transformes l'objectif qu'une personne écrit dans une app d'agenda et de budget (Québec, français, dollars canadiens) en objectif mesurable.
-Règles :
-- Respecte ce que la personne a écrit ; n'invente pas de montant ni de fréquence absents. S'il n'y a pas de chiffre, choisis metric=check, target=1, period=once.
-- Les durées sont en minutes. Les montants sont en dollars (pas en cents).
-- La première étape est une action concrète, courte et faisable cette semaine (ex. « Ouvrir un compte épargne », « Première course de 20 min »).
-- Ton factuel : pas de slogan, pas d'emoji.`;
+const SYSTEM = `Rends mesurable l'objectif écrit (Québec, français, $ CA). N'invente ni montant ni fréquence absents ; sans chiffre : check, 1, once. Durées en minutes, montants en dollars. Première étape : action concrète faisable cette semaine. Ton factuel.`;
 
 const clampText = (s: string, n: number) => s.replace(/\s+/g, ' ').trim().slice(0, n);
 
@@ -113,23 +104,38 @@ export function interpretWithRules(text: string, tz = config.defaultTimezone): G
   return sanitize({ title, kind: financial ? 'financial' : 'personal', metric: 'check', target: 1, unit: '', period: 'once', deadline, summary: 'Objectif à cocher une fois atteint.', firstStep: { title: `Première étape : ${title}`, durationMin: 30 } }, 'rules');
 }
 
-export async function interpretGoal(text: string, tz = config.defaultTimezone): Promise<GoalDraft> {
+/** Réponses déjà calculées (les idées proposées reviennent souvent) : aucun nouvel appel pour le même texte. */
+const cache = new Map<string, GoalDraft>();
+
+/**
+ * Économe en jetons : les règles locales suffisent dès que le texte contient une mesure (montant, durée, « N fois ») ;
+ * Claude n'est appelé que pour les objectifs sans chiffre, une fois par texte, et dans la limite quotidienne.
+ */
+export async function interpretGoal(text: string, tz = config.defaultTimezone, userId?: string): Promise<GoalDraft> {
   const clean = clampText(String(text || ''), 300);
   if (clean.length < 3) throw new Error('Décris ton objectif en quelques mots');
-  if (!config.vision.anthropicKey) return interpretWithRules(clean, tz);
+  const rules = interpretWithRules(clean, tz);
+  if (rules.metric !== 'check') return rules;
+  const key = strip(clean).replace(/\s+/g, ' ');
+  if (cache.has(key)) return cache.get(key)!;
+  if (!config.vision.anthropicKey || (userId && !aiAllowed(userId, tz))) return rules;
   try {
     const client = new Anthropic({ apiKey: config.vision.anthropicKey, timeout: 20_000, maxRetries: 1 });
+    const model = config.ai.textModel;
     const response = await client.beta.messages.parse({
-      model: config.vision.anthropicModel,
-      max_tokens: 2000,
-      betas: ['server-side-fallback-2026-07-01'],
-      fallbacks: 'default',
+      model,
+      max_tokens: 1000,
+      ...fallbackParams(model),
       output_config: { effort: 'low', format: betaZodOutputFormat(GoalSchema) },
       system: SYSTEM,
-      messages: [{ role: 'user', content: `Date du jour : ${DateTime.now().setZone(tz).toISODate()}.\nObjectif écrit par la personne : « ${clean} »` }],
-    });
-    if (response.stop_reason === 'refusal' || !response.parsed_output) return interpretWithRules(clean, tz);
-    return sanitize(response.parsed_output as Omit<GoalDraft, 'source'>, 'ai');
+      messages: [{ role: 'user', content: `${DateTime.now().setZone(tz).toISODate()} : « ${clean} »` }],
+    } as any);
+    recordUsage(userId || null, 'goal', model, response.usage);
+    if (response.stop_reason === 'refusal' || !response.parsed_output) return rules;
+    const out = sanitize(response.parsed_output as Omit<GoalDraft, 'source'>, 'ai');
+    if (cache.size > 500) cache.clear();
+    cache.set(key, out);
+    return out;
   } catch (e) {
     if (e instanceof Anthropic.APIError) console.error(`[objectif] Claude indisponible (${e.status ?? '?'}) : règles locales`);
     else console.error('[objectif] interprétation impossible, règles locales :', e instanceof Error ? e.message : e);

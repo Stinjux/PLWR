@@ -8,6 +8,7 @@ import { createEvent, getOccurrence, listOccurrences, listUnscheduled, updateOcc
 import { formatGoalValue, goalProgress, rowToGoal, type Goal } from './goals.ts';
 import { proposePlan, type PlanResult } from './planner.ts';
 import { strip } from './expenseParser.ts';
+import { aiAllowed, fallbackParams, recordUsage } from './aiUsage.ts';
 
 /**
  * Assistant de la journée : fait le point sur les tâches du jour, réorganise la journée, déplace ou reporte un élément.
@@ -23,7 +24,7 @@ export type Proposal =
   | { id: string; type: 'goal_block'; goalId: string; title: string; detail: string; blockTitle: string; start: string; end: string }
   | { id: string; type: 'plan'; title: string; detail: string; changes: { id: string; title: string; start: string; end: string }[]; postponed: { id: string; title: string; start: string | null; end: string | null; planDate: string | null }[] };
 
-export type AssistantReply = { reply: string; proposals: Proposal[]; source: 'ai' | 'rules' };
+export type AssistantReply = { reply: string; proposals: Proposal[]; source: 'ai' | 'rules'; handled?: boolean };
 type Item = { id: string; title: string; kind: 'fixed' | 'flexible'; start: string | null; end: string | null; durationMin: number; status: string; priority: number; recurring: boolean };
 
 const hm = (iso: string, tz: string) => {
@@ -211,7 +212,9 @@ function withRules(user: User, message: string): AssistantReply {
   const t = strip(message);
   const { items } = dayItems(user);
   const active = items.filter((i) => i.status === 'active');
-  const reply = (r: string, proposals: Proposal[] = []): AssistantReply => ({ reply: r, proposals, source: 'rules' });
+  const reply = (r: string, proposals: Proposal[] = []): AssistantReply => ({ reply: r, proposals, source: 'rules', handled: true });
+  /** Les règles n'ont pas pu conclure : Claude (s'il est configuré) prendra la demande. */
+  const ask = (r: string): AssistantReply => ({ reply: r, proposals: [], source: 'rules', handled: false });
 
   const goals = userGoals(user);
   if (/objectif/.test(t) && !/\b(planifi|prevoi|bloque|reserve|cale)/.test(t)) return reply(goalsSummary(user));
@@ -221,7 +224,7 @@ function withRules(user: User, message: string): AssistantReply {
     const g = findGoal(goals, message);
     if (g) {
       const when = parseWhen(message, user);
-      if (!when.time) return reply(`À quelle heure veux-tu placer un bloc pour « ${g.goal.title} » ? Ex. : « planifie ${g.goal.title.toLowerCase()} demain à 19 h ».`);
+      if (!when.time) return ask(`À quelle heure veux-tu placer un bloc pour « ${g.goal.title} » ? Ex. : « planifie ${g.goal.title.toLowerCase()} demain à 19 h ».`);
       const minutes = Number(t.match(/(\d+)\s*(?:min|minutes?)\b/)?.[1] || 0);
       const durationMin = minutes || (g.goal.metric === 'duration' ? Math.min(120, Math.max(15, Math.round(g.remaining || g.target))) : 30);
       const start = DateTime.fromISO(when.date, { zone: user.timezone }).set({ hour: when.time.h, minute: when.time.m }).toUTC().toISO()!;
@@ -241,7 +244,7 @@ function withRules(user: User, message: string): AssistantReply {
       const v = progressValue(g, message);
       if (v) return reply(`Je peux noter ce progrès sur « ${g.goal.title} ».`, [goalProgressProposal(g, v)]);
     }
-    return reply(active.length ? `Lequel as-tu terminé ? Il reste : ${active.map((i) => i.title).join(', ')}.` : 'Tout est déjà marqué comme fait aujourd’hui.');
+    return ask(active.length ? `Lequel as-tu terminé ? Il reste : ${active.map((i) => i.title).join(', ')}.` : 'Tout est déjà marqué comme fait aujourd’hui.');
   }
   // Progrès sur un objectif : « j'ai couru ce matin », « j'ai lu 25 min », « j'ai mis 100 $ de côté »
   if (/\bj.?ai\b/.test(t) && goals.length) {
@@ -249,139 +252,112 @@ function withRules(user: User, message: string): AssistantReply {
     if (g) {
       const v = progressValue(g, message);
       if (v) return reply(`Je peux noter ce progrès sur « ${g.goal.title} ».`, [goalProgressProposal(g, v)]);
-      return reply(`Combien pour « ${g.goal.title} » ? Ex. : « j’ai ${g.goal.metric === 'amount' ? 'mis 50 $ de côté' : 'fait 30 min'} ».`);
+      return ask(`Combien pour « ${g.goal.title} » ? Ex. : « j’ai ${g.goal.metric === 'amount' ? 'mis 50 $ de côté' : 'fait 30 min'} ».`);
     }
   }
 
   if (/\b(deplace|decale|bouge|reporte|repousse|remets|mets|place|avance|recule|change)\b/.test(t)) {
     const it = findItem(items, message);
-    if (!it) return reply(`Quel élément veux-tu déplacer ? Aujourd’hui : ${items.map((i) => i.title).join(', ') || 'rien de prévu'}.`);
+    if (!it) return ask(`Quel élément veux-tu déplacer ? Aujourd’hui : ${items.map((i) => i.title).join(', ') || 'rien de prévu'}.`);
     const when = parseWhen(message, user);
     if (!when.time) {
       if (when.date !== today(user.timezone) || /report|repousse|remets/.test(t)) return reply(`Je peux reporter « ${it.title} ».`, [postponeProposal(user, it, when.date === today(user.timezone) ? DateTime.now().setZone(user.timezone).plus({ days: 1 }).toISODate()! : when.date)]);
-      return reply(`À quelle heure veux-tu placer « ${it.title} » ? Ex. : « déplace ${it.title.toLowerCase()} à 15 h ».`);
+      return ask(`À quelle heure veux-tu placer « ${it.title} » ? Ex. : « déplace ${it.title.toLowerCase()} à 15 h ».`);
     }
     const start = DateTime.fromISO(when.date, { zone: user.timezone }).set({ hour: when.time.h, minute: when.time.m }).toUTC().toISO()!;
     return reply(`Je peux déplacer « ${it.title} ».`, [moveProposal(user, it, start)]);
   }
-  return reply(daySummary(user));
+  // Bilan demandé explicitement : les règles suffisent ; sinon la demande est libre et revient à Claude
+  const asked = /(ou j.?en suis|bilan|progres|avancement|le point|resume|il me reste|reste.t.il|mon programme|ma journee|aujourd.?hui)/.test(t);
+  return asked ? reply(daySummary(user)) : ask(daySummary(user));
 }
 
 // ---------- Claude ----------
 
+// Outils courts : les identifiants sont des codes (e1, o1) traduits au retour, pour économiser des jetons.
 const TOOLS: Anthropic.Beta.BetaTool[] = [
-  { name: 'propose_complete', description: 'Propose de marquer un élément du jour comme fait.', input_schema: { type: 'object', properties: { item_id: { type: 'string' } }, required: ['item_id'] } },
+  { name: 'fait', description: 'Marquer un élément comme fait.', input_schema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] } },
+  { name: 'deplacer', description: 'Déplacer un élément (date AAAA-MM-JJ, heure HH:MM).', input_schema: { type: 'object', properties: { id: { type: 'string' }, date: { type: 'string' }, heure: { type: 'string' } }, required: ['id', 'date', 'heure'] } },
+  { name: 'reporter', description: 'Reporter un élément à une date.', input_schema: { type: 'object', properties: { id: { type: 'string' }, date: { type: 'string' } }, required: ['id', 'date'] } },
+  { name: 'progres', description: 'Noter un progrès sur un objectif (unité de l’objectif).', input_schema: { type: 'object', properties: { id: { type: 'string' }, valeur: { type: 'number' } }, required: ['id', 'valeur'] } },
   {
-    name: 'propose_move',
-    description: 'Propose de déplacer un élément à une date et une heure (heure locale).',
-    input_schema: { type: 'object', properties: { item_id: { type: 'string' }, date: { type: 'string', description: 'YYYY-MM-DD' }, time: { type: 'string', description: 'HH:MM, 24 h' } }, required: ['item_id', 'date', 'time'] },
+    name: 'bloc',
+    description: 'Réserver du temps pour un objectif.',
+    input_schema: { type: 'object', properties: { id: { type: 'string' }, date: { type: 'string' }, heure: { type: 'string' }, minutes: { type: 'number' } }, required: ['id', 'date', 'heure', 'minutes'] },
   },
-  {
-    name: 'propose_postpone',
-    description: 'Propose de reporter un élément à un autre jour (même heure pour un rendez-vous, « à placer » pour une tâche).',
-    input_schema: { type: 'object', properties: { item_id: { type: 'string' }, date: { type: 'string', description: 'YYYY-MM-DD' } }, required: ['item_id', 'date'] },
-  },
-  {
-    name: 'propose_goal_progress',
-    description: 'Propose de noter un progrès sur un objectif enregistré. value dans l’unité de l’objectif : minutes (duration), dollars (amount), nombre (quantity), 1 (check).',
-    input_schema: { type: 'object', properties: { goal_id: { type: 'string' }, value: { type: 'number' } }, required: ['goal_id', 'value'] },
-  },
-  {
-    name: 'propose_goal_block',
-    description: 'Propose de réserver un bloc de temps lié à un objectif (heure locale).',
-    input_schema: {
-      type: 'object',
-      properties: { goal_id: { type: 'string' }, date: { type: 'string', description: 'YYYY-MM-DD' }, time: { type: 'string', description: 'HH:MM, 24 h' }, duration_min: { type: 'number' }, title: { type: 'string' } },
-      required: ['goal_id', 'date', 'time', 'duration_min'],
-    },
-  },
-  { name: 'propose_reorganize', description: 'Propose une journée réorganisée à partir de maintenant (rendez-vous fixes et pauses gardés, tâches replacées ou reportées).', input_schema: { type: 'object', properties: {} } },
+  { name: 'reorganiser', description: 'Réorganiser la journée à partir de maintenant.', input_schema: { type: 'object', properties: {} } },
 ];
 
-const SYSTEM = `Tu es l'assistant de la journée dans PLWR, une app d'agenda, d'objectifs et de budget (Québec, français, tutoiement).
-Tu aides la personne à suivre l'avancement de ses tâches d'aujourd'hui et de ses objectifs enregistrés, à noter ses progrès, à réorganiser sa journée et à replanifier des éléments ou réserver du temps pour un objectif.
-Règles :
-- Tu ne modifies rien toi-même : utilise les outils propose_* pour créer des propositions ; la personne les applique d'un geste. Dis-le simplement.
-- N'utilise que les identifiants d'éléments et d'objectifs fournis dans le contexte.
-- Pour un bilan d'objectifs, donne pour chacun le fait / la cible de la période en cours.
-- Réponds en 1 à 3 phrases courtes, factuelles et chaleureuses. Pas d'emoji, pas de slogans.
-- Pour un bilan, donne les chiffres (fait / total), le prochain élément et ce qui reste.`;
+const SYSTEM = `Assistant de journée (Québec, tutoiement). Pour tout changement, appelle un outil : il crée une proposition que la personne valide. Utilise seulement les codes fournis (e = élément du jour, o = objectif). Réponds en 1 à 2 phrases factuelles, sans emoji.`;
 
 async function withClaude(user: User, message: string, history: { role: 'user' | 'assistant'; text: string }[]): Promise<AssistantReply> {
   const { date, items } = dayItems(user);
-  const byId = new Map(items.map((i) => [i.id, i]));
-  const ctx = items.map((i) => ({ id: i.id, titre: i.title, type: i.kind === 'fixed' ? 'rendez-vous' : 'tâche', debut: i.start ? DateTime.fromISO(i.start).setZone(user.timezone).toFormat('HH:mm') : null, duree_min: i.durationMin, statut: i.status, recurrent: i.recurring }));
-  const now = DateTime.now().setZone(user.timezone);
   const goals = userGoals(user);
-  const goalById = new Map(goals.map((g) => [g.goal.id, g]));
-  const goalCtx = goals.map((g) => ({ id: g.goal.id, titre: g.goal.title, mesure: g.goal.metric, unite: g.goal.metric === 'duration' ? 'min' : g.goal.metric === 'amount' ? '$' : g.goal.unit, cible: g.target, fait: g.done, periode: g.goal.period, echeance: g.goal.deadline, atteint: g.completed }));
+  const tz = user.timezone;
+  const hhmm = (iso: string | null) => (iso ? DateTime.fromISO(iso).setZone(tz).toFormat('HH:mm') : '-');
+  // Contexte compact : « code|titre|heure|minutes|r(endez-vous) ou t(âche)|x si fait »
+  const itemCode = new Map(items.map((it, i) => [`e${i + 1}`, it]));
+  const goalCode = new Map(goals.map((g, i) => [`o${i + 1}`, g]));
+  const unit = (g: GoalInfo) => (g.goal.metric === 'duration' ? 'min' : g.goal.metric === 'amount' ? '$' : g.goal.metric === 'check' ? 'fait' : g.goal.unit);
+  const itemsTxt = [...itemCode].map(([c, i]) => `${c}|${i.title}|${hhmm(i.start)}|${i.durationMin}|${i.kind === 'fixed' ? 'r' : 't'}${i.status === 'done' ? '|x' : ''}`).join('\n');
+  const goalsTxt = [...goalCode].map(([c, g]) => `${c}|${g.goal.title}|${g.done}/${g.target} ${unit(g)}|${g.goal.period}`).join('\n');
+  const now = DateTime.now().setZone(tz);
   const messages: Anthropic.Beta.BetaMessageParam[] = [
-    ...history.slice(-8).map((h) => ({ role: h.role, content: h.text.slice(0, 1000) })),
-    { role: 'user', content: `Contexte (aujourd'hui ${date}, il est ${now.toFormat('HH:mm')}, fuseau ${user.timezone}).\nÉléments du jour : ${JSON.stringify(ctx)}\nObjectifs enregistrés (période en cours) : ${JSON.stringify(goalCtx)}\n\nMessage : ${message.slice(0, 1000)}` },
+    ...history.slice(-4).map((h) => ({ role: h.role, content: h.text.slice(0, 300) })),
+    { role: 'user', content: `${date} ${now.toFormat('HH:mm')}\nÉléments:\n${itemsTxt || '(aucun)'}\nObjectifs:\n${goalsTxt || '(aucun)'}\n\n${message.slice(0, 500)}` },
   ];
-  const proposals: Proposal[] = [];
+  const model = config.ai.textModel;
   const client = new Anthropic({ apiKey: config.vision.anthropicKey, timeout: 30_000, maxRetries: 1 });
-  for (let turn = 0; turn < 4; turn++) {
-    const response = await client.beta.messages.create({
-      model: config.vision.anthropicModel,
-      max_tokens: 4000,
-      betas: ['server-side-fallback-2026-07-01'],
-      fallbacks: 'default',
-      output_config: { effort: 'low' },
-      system: SYSTEM,
-      tools: TOOLS,
-      messages,
-    });
-    if (response.stop_reason === 'refusal') return withRules(user, message);
-    const uses = response.content.filter((b): b is Anthropic.Beta.BetaToolUseBlock => b.type === 'tool_use');
-    if (!uses.length || response.stop_reason !== 'tool_use') {
-      const text = response.content.filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === 'text').map((b) => b.text).join('\n').trim();
-      return { reply: text || daySummary(user), proposals, source: 'ai' };
-    }
-    messages.push({ role: 'assistant', content: response.content });
-    const results: Anthropic.Beta.BetaToolResultBlockParam[] = uses.map((u) => {
-      const input = (u.input || {}) as Record<string, string>;
-      const item = input.item_id ? byId.get(input.item_id) : undefined;
-      const goal = (input as any).goal_id ? goalById.get((input as any).goal_id) : undefined;
-      let out = 'Proposition créée, en attente de confirmation.';
-      try {
-        if (u.name === 'propose_goal_progress' || u.name === 'propose_goal_block') {
-          const inp = u.input as any;
-          if (!goal) out = 'Objectif inconnu : utilise un identifiant du contexte.';
-          else if (u.name === 'propose_goal_progress' && Number(inp.value) > 0) proposals.push(goalProgressProposal(goal, Number(inp.value)));
-          else if (u.name === 'propose_goal_block' && /^\d{4}-\d{2}-\d{2}$/.test(inp.date || '') && /^\d{1,2}:\d{2}$/.test(inp.time || '')) {
-            const start = DateTime.fromISO(`${inp.date}T${String(inp.time).padStart(5, '0')}`, { zone: user.timezone }).toUTC().toISO()!;
-            proposals.push(goalBlockProposal(user, goal, start, Math.min(240, Math.max(10, Math.round(Number(inp.duration_min) || 30))), inp.title));
-          } else out = 'Paramètres invalides.';
-        } else if (u.name === 'propose_reorganize') {
-          const p = planProposal(user, proposePlan(user.id, user.timezone, user.settings, date));
-          if (p) proposals.push(p);
-          else out = 'Rien à déplacer : la journée tient dans le temps qui reste.';
-        } else if (!item) out = 'Élément inconnu : utilise un identifiant du contexte.';
-        else if (u.name === 'propose_complete') proposals.push(completeProposal(user, item));
-        else if (u.name === 'propose_postpone' && /^\d{4}-\d{2}-\d{2}$/.test(input.date || '')) proposals.push(postponeProposal(user, item, input.date));
-        else if (u.name === 'propose_move' && /^\d{4}-\d{2}-\d{2}$/.test(input.date || '') && /^\d{1,2}:\d{2}$/.test(input.time || '')) {
-          proposals.push(moveProposal(user, item, DateTime.fromISO(`${input.date}T${input.time.padStart(5, '0')}`, { zone: user.timezone }).toUTC().toISO()!));
-        } else out = 'Paramètres invalides.';
-      } catch (e) {
-        out = e instanceof Error ? e.message : 'Erreur';
-      }
-      return { type: 'tool_result', tool_use_id: u.id, content: out };
-    });
-    messages.push({ role: 'user', content: results });
+  // Un seul appel : les outils ne font que créer des propositions, inutile de renvoyer le contexte pour un second tour.
+  const response = await client.beta.messages.create({
+    model,
+    max_tokens: 1500,
+    ...fallbackParams(model),
+    output_config: { effort: 'low' },
+    system: SYSTEM,
+    tools: TOOLS,
+    messages,
+  } as any);
+  recordUsage(user.id, 'assistant', model, (response as any).usage);
+  if (response.stop_reason === 'refusal') return withRules(user, message);
+  const proposals: Proposal[] = [];
+  const issues: string[] = [];
+  for (const u of response.content.filter((b): b is Anthropic.Beta.BetaToolUseBlock => b.type === 'tool_use')) {
+    const inp = (u.input || {}) as any;
+    const item = itemCode.get(inp.id);
+    const goal = goalCode.get(inp.id);
+    const okDate = /^\d{4}-\d{2}-\d{2}$/.test(inp.date || '');
+    const okTime = /^\d{1,2}:\d{2}$/.test(inp.heure || '');
+    const at = () => DateTime.fromISO(`${inp.date}T${String(inp.heure).padStart(5, '0')}`, { zone: tz }).toUTC().toISO()!;
+    if (u.name === 'reorganiser') {
+      const p = planProposal(user, proposePlan(user.id, tz, user.settings, date));
+      if (p) proposals.push(p);
+      else issues.push('Ta journée tient déjà dans le temps qui reste.');
+    } else if (u.name === 'fait' && item) proposals.push(completeProposal(user, item));
+    else if (u.name === 'deplacer' && item && okDate && okTime) proposals.push(moveProposal(user, item, at()));
+    else if (u.name === 'reporter' && item && okDate) proposals.push(postponeProposal(user, item, inp.date));
+    else if (u.name === 'progres' && goal && Number(inp.valeur) > 0) proposals.push(goalProgressProposal(goal, Number(inp.valeur)));
+    else if (u.name === 'bloc' && goal && okDate && okTime) proposals.push(goalBlockProposal(user, goal, at(), Math.min(240, Math.max(10, Math.round(Number(inp.minutes) || 30)))));
   }
-  return { reply: 'Voici mes propositions.', proposals, source: 'ai' };
+  const text = response.content.filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === 'text').map((b) => b.text).join('\n').trim();
+  return { reply: text || issues[0] || (proposals.length ? 'Voici ma proposition : applique-la si elle te convient.' : daySummary(user)), proposals, source: 'ai' };
 }
 
+/**
+ * Économe en jetons : les règles locales répondent d'abord (bilan, objectifs, « j'ai fini », déplacer, reporter, réorganiser) ;
+ * Claude n'est appelé que pour une demande qu'elles ne savent pas traiter, dans la limite quotidienne par personne.
+ */
 export async function assistantReply(user: User, message: string, history: { role: 'user' | 'assistant'; text: string }[] = []): Promise<AssistantReply> {
   const text = String(message || '').trim();
   if (!text) return { reply: daySummary(user), proposals: [], source: 'rules' };
-  if (!config.vision.anthropicKey) return withRules(user, text);
+  const rules = withRules(user, text);
+  const done = ({ handled, ...r }: AssistantReply) => r;
+  if (rules.handled || rules.proposals.length || !config.vision.anthropicKey || !aiAllowed(user.id, user.timezone)) return done(rules);
   try {
     return await withClaude(user, text, history.filter((h) => (h.role === 'user' || h.role === 'assistant') && typeof h.text === 'string'));
   } catch (e) {
     console.error('[assistant] Claude indisponible, règles locales :', e instanceof Anthropic.APIError ? e.status : e instanceof Error ? e.message : e);
-    return withRules(user, text);
+    return done(rules);
   }
 }
 
